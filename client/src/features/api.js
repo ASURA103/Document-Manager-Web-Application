@@ -88,6 +88,23 @@ export const api = createApi({
         } catch { /* surfaced by the caller */ }
       },
     }),
+    getComments: b.query({
+      query: (id) => `/documents/${id}/comments`,
+      transformResponse: (r) => r.data,
+      providesTags: (_r, _e, id) => [{ type: 'Comments', id }],
+    }),
+    addComment: b.mutation({
+      query: ({ id, body }) => ({ url: `/documents/${id}/comments`, method: 'POST', body: { body } }),
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'Comments', id }],
+    }),
+    updateComment: b.mutation({
+      query: ({ id, commentId, resolved }) => ({ url: `/documents/${id}/comments/${commentId}`, method: 'PATCH', body: { resolved } }),
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'Comments', id }],
+    }),
+    deleteComment: b.mutation({
+      query: ({ id, commentId }) => ({ url: `/documents/${id}/comments/${commentId}`, method: 'DELETE' }),
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'Comments', id }],
+    }),
     deleteDocument: b.mutation({
       query: (id) => ({ url: `/documents/${id}`, method: 'DELETE' }),
       invalidatesTags: ['Docs'],
@@ -114,5 +131,6 @@ export const {
   useGetDocumentsQuery, useGetDocumentQuery, useCreateDocumentMutation, useImportDocumentMutation,
   useUpdateDocumentMutation, useDeleteDocumentMutation,
   useGetVersionsQuery, useGetVersionQuery, useRestoreVersionMutation,
+  useGetCommentsQuery, useAddCommentMutation, useUpdateCommentMutation, useDeleteCommentMutation,
   useGetSharesQuery, useAddShareMutation, useRemoveShareMutation,
 } = api

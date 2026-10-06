@@ -4,6 +4,7 @@ import { emptyDoc } from '../utils/tiptap.js';
 import { authorizeDocument } from './access.service.js';
 import { AppError } from '../utils/AppError.js';
 import { deleteVersionsFor, snapshotBeforeOverwrite } from './version.service.js';
+import { deleteCommentsFor } from './comment.service.js';
 
 const summary = (doc, role) => ({
   id: doc.id,
@@ -67,5 +68,5 @@ export async function updateDocument(user, id, { title, content }) {
 
 export async function deleteDocument(user, id) {
   const { doc } = await authorizeDocument(id, user, 'manage');
-  await Promise.all([doc.deleteOne(), DocumentShare.deleteMany({ document: doc._id }), deleteVersionsFor(doc._id)]);
+  await Promise.all([doc.deleteOne(), DocumentShare.deleteMany({ document: doc._id }), deleteVersionsFor(doc._id), deleteCommentsFor(doc._id)]);
 }

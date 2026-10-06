@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { TITLE_MAX } from '../models/Document.js';
 import { PERMISSIONS } from '../models/DocumentShare.js';
+import { COMMENT_MAX } from '../models/Comment.js';
 
 const objectId = z.string().regex(/^[a-f\d]{24}$/i, 'Invalid id.');
 
@@ -24,5 +25,8 @@ export const shareDocumentSchema = z.object({
 });
 
 export const idParams = z.object({ id: objectId });
+export const addCommentSchema = z.object({ body: z.string().trim().min(1, 'Write a comment first.').max(COMMENT_MAX, `Comments are limited to ${COMMENT_MAX} characters.`) });
+export const updateCommentSchema = z.object({ resolved: z.boolean() });
+export const commentParams = z.object({ id: objectId, commentId: objectId });
 export const versionParams = z.object({ id: objectId, versionId: objectId });
 export const shareParams = z.object({ id: objectId, userId: objectId });

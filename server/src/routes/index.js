@@ -5,7 +5,7 @@ import { validate } from '../middleware/validate.js';
 import * as auth from '../controllers/auth.controller.js';
 import * as docs from '../controllers/document.controller.js';
 import {
-  loginSchema, createDocumentSchema, updateDocumentSchema, shareDocumentSchema, idParams, shareParams, versionParams,
+  loginSchema, createDocumentSchema, updateDocumentSchema, shareDocumentSchema, idParams, shareParams, versionParams, addCommentSchema, updateCommentSchema, commentParams,
 } from '../validators/schemas.js';
 
 export function buildRouter({ jwtSecret }) {
@@ -28,6 +28,11 @@ export function buildRouter({ jwtSecret }) {
   router.get('/documents/:id/versions', validate({ params: idParams }), docs.listVersions);
   router.get('/documents/:id/versions/:versionId', validate({ params: versionParams }), docs.getVersion);
   router.post('/documents/:id/versions/:versionId/restore', validate({ params: versionParams }), docs.restoreVersion);
+
+  router.get('/documents/:id/comments', validate({ params: idParams }), docs.listComments);
+  router.post('/documents/:id/comments', validate({ params: idParams, body: addCommentSchema }), docs.addComment);
+  router.patch('/documents/:id/comments/:commentId', validate({ params: commentParams, body: updateCommentSchema }), docs.updateComment);
+  router.delete('/documents/:id/comments/:commentId', validate({ params: commentParams }), docs.removeComment);
 
   router.get('/documents/:id/shares', validate({ params: idParams }), docs.listShares);
   router.post('/documents/:id/shares', validate({ params: idParams, body: shareDocumentSchema }), docs.addShare);

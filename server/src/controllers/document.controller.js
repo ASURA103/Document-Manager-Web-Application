@@ -1,6 +1,7 @@
 import * as documents from '../services/document.service.js';
 import * as shares from '../services/share.service.js';
 import * as versions from '../services/version.service.js';
+import * as comments from '../services/comment.service.js';
 import { importDocument } from '../services/import.service.js';
 
 const ok = (res, data, status = 200) => res.status(status).json({ success: true, data });
@@ -19,6 +20,14 @@ export const remove = async (req, res) => {
 export const listVersions = async (req, res) => ok(res, await versions.listVersions(req.user, req.params.id));
 export const getVersion = async (req, res) => ok(res, await versions.getVersion(req.user, req.params.id, req.params.versionId));
 export const restoreVersion = async (req, res) => ok(res, await versions.restoreVersion(req.user, req.params.id, req.params.versionId));
+
+export const listComments = async (req, res) => ok(res, await comments.listComments(req.user, req.params.id));
+export const addComment = async (req, res) => ok(res, await comments.addComment(req.user, req.params.id, req.body), 201);
+export const updateComment = async (req, res) => ok(res, await comments.setResolved(req.user, req.params.id, req.params.commentId, req.body));
+export const removeComment = async (req, res) => {
+  await comments.removeComment(req.user, req.params.id, req.params.commentId);
+  ok(res, { deleted: true });
+};
 
 export const listShares = async (req, res) => ok(res, await shares.listShares(req.user, req.params.id));
 export const addShare = async (req, res) =>

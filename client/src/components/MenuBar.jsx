@@ -47,6 +47,7 @@ export default function MenuBar({ editor, autosave, canWrite, isOwner, viewMode,
           <MenuItem key={z} active={zoom === z} onClick={() => actions.setZoom(z)}>Zoom {z}%</MenuItem>
         ))}
         <MenuDivider />
+        <MenuItem onClick={actions.comments}>Comments</MenuItem>
         <MenuItem active={showCount} onClick={actions.toggleCount}>Show word count</MenuItem>
       </Dropdown>
 

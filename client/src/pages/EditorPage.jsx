@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
-import { FileText, History, Users } from 'lucide-react'
+import { FileText, History, MessageSquare, Users } from 'lucide-react'
 import {
-  errorMessage, useCreateDocumentMutation, useDeleteDocumentMutation, useGetDocumentQuery, useRestoreVersionMutation, useUpdateDocumentMutation,
+  errorMessage, useCreateDocumentMutation, useDeleteDocumentMutation, useGetCommentsQuery, useGetDocumentQuery, useRestoreVersionMutation, useUpdateDocumentMutation,
 } from '../features/api.js'
 import { extensions } from '../editor/extensions.js'
 import { trimTrailingEmpty } from '../editor/trimTrailing.js'
@@ -17,6 +17,7 @@ import InfoDialog from '../components/InfoDialog.jsx'
 import UserMenu from '../components/UserMenu.jsx'
 import SidePanel from '../components/SidePanel.jsx'
 import HistoryPanel from '../components/HistoryPanel.jsx'
+import CommentsPanel from '../components/CommentsPanel.jsx'
 import LeaveDialog from '../components/LeaveDialog.jsx'
 import DownloadDialog from '../components/DownloadDialog.jsx'
 
@@ -44,7 +45,9 @@ function DocumentEditor({ doc }) {
   const [createDocument] = useCreateDocumentMutation()
   const [deleteDocument] = useDeleteDocumentMutation()
   const [restoreVersion] = useRestoreVersionMutation()
-  const [panel, setPanel] = useState(null) // null | 'history'
+  const [panel, setPanel] = useState(null) // null | 'history' | 'comments'
+  const { data: comments } = useGetCommentsQuery(doc.id)
+  const openComments = comments ? comments.filter((c) => !c.resolved).length : 0
 
   const [status, setStatusState] = useState('saved')
   const [saveError, setSaveError] = useState(null)
@@ -185,6 +188,7 @@ function DocumentEditor({ doc }) {
     rename: () => titleRef.current?.focus(),
     download: () => setDialog('download'),
     history: () => setPanel('history'),
+    comments: () => setPanel('comments'),
     print: printDocument,
     remove: async () => {
       if (!window.confirm(`Delete "${doc.title}" permanently? Shared access will be removed too.`)) return
@@ -296,6 +300,17 @@ function DocumentEditor({ doc }) {
           </button>
           <button
             type="button"
+            aria-label="Comments"
+            aria-pressed={panel === 'comments'}
+            title="Comments"
+            onClick={() => setPanel((p) => (p === 'comments' ? null : 'comments'))}
+            className={`relative rounded-full p-2 text-slate-700 hover:bg-slate-200 ${panel === 'comments' ? 'bg-blue-100' : ''}`}
+          >
+            <MessageSquare size={18} />
+            {openComments > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-blue-700 px-1 text-center text-[10px] leading-4 text-white" aria-label={`${openComments} open comments`}>{openComments}</span>}
+          </button>
+          <button
+            type="button"
             aria-label="Version history"
             aria-pressed={panel === 'history'}
             title="Version history"
@@ -318,7 +333,8 @@ function DocumentEditor({ doc }) {
         </div>
       </main>
       {panel && (
-        <SidePanel tabs={[{ id: 'history', label: 'History' }]} active={panel} onTab={setPanel} onClose={() => setPanel(null)}>
+        <SidePanel tabs={[{ id: 'history', label: 'History' }, { id: 'comments', label: 'Comments', badge: openComments || undefined }]} active={panel} onTab={setPanel} onClose={() => setPanel(null)}>
+          {panel === 'comments' && <CommentsPanel documentId={doc.id} />}
           {panel === 'history' && <HistoryPanel documentId={doc.id} canRestore={canWrite && !viewMode} onRestore={restoreFromHistory} />}
         </SidePanel>
       )}

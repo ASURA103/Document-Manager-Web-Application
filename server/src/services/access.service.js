@@ -7,6 +7,7 @@ import { AppError, notFound } from '../utils/AppError.js';
 const CAN = {
   read: ['owner', 'editor', 'viewer'],
   write: ['owner', 'editor'],
+  comment: ['owner', 'editor', 'viewer'], // viewers may comment but not edit
   manage: ['owner'], // rename, share, delete
 };
 
