@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useSelector } from 'react-redux'
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
 import { FileText, History, MessageSquare, Users } from 'lucide-react'
 import {
@@ -18,6 +19,8 @@ import UserMenu from '../components/UserMenu.jsx'
 import SidePanel from '../components/SidePanel.jsx'
 import HistoryPanel from '../components/HistoryPanel.jsx'
 import CommentsPanel from '../components/CommentsPanel.jsx'
+import PresenceAvatars from '../components/PresenceAvatars.jsx'
+import usePresence from '../hooks/usePresence.js'
 import LeaveDialog from '../components/LeaveDialog.jsx'
 import DownloadDialog from '../components/DownloadDialog.jsx'
 
@@ -47,6 +50,8 @@ function DocumentEditor({ doc }) {
   const [restoreVersion] = useRestoreVersionMutation()
   const [panel, setPanel] = useState(null) // null | 'history' | 'comments'
   const { data: comments } = useGetCommentsQuery(doc.id)
+  const myId = useSelector((s) => s.auth.user?.id)
+  const others = usePresence(doc.id).filter((p) => p.id !== myId) // everyone else with this document open
   const openComments = comments ? comments.filter((c) => !c.resolved).length : 0
 
   const [status, setStatusState] = useState('saved')
@@ -298,6 +303,7 @@ function DocumentEditor({ doc }) {
           >
             <Users size={16} /> Share
           </button>
+          <PresenceAvatars people={others} />
           <button
             type="button"
             aria-label="Comments"

@@ -34,6 +34,9 @@ export function buildRouter({ jwtSecret }) {
   router.patch('/documents/:id/comments/:commentId', validate({ params: commentParams, body: updateCommentSchema }), docs.updateComment);
   router.delete('/documents/:id/comments/:commentId', validate({ params: commentParams }), docs.removeComment);
 
+  router.post('/documents/:id/presence', validate({ params: idParams }), docs.heartbeat);
+  router.delete('/documents/:id/presence', validate({ params: idParams }), docs.leavePresence);
+
   router.get('/documents/:id/shares', validate({ params: idParams }), docs.listShares);
   router.post('/documents/:id/shares', validate({ params: idParams, body: shareDocumentSchema }), docs.addShare);
   router.delete('/documents/:id/shares/:userId', validate({ params: shareParams }), docs.removeShare);

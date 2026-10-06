@@ -71,6 +71,9 @@ export const api = createApi({
         } catch { /* surfaced by the caller */ }
       },
     }),
+    // Presence: heartbeat returns everyone seen on the document recently (see server presence.service.js).
+    heartbeat: b.mutation({ query: (id) => ({ url: `/documents/${id}/presence`, method: 'POST' }), transformResponse: (r) => r.data }),
+    leavePresence: b.mutation({ query: (id) => ({ url: `/documents/${id}/presence`, method: 'DELETE' }) }),
     getVersions: b.query({
       query: (id) => `/documents/${id}/versions`,
       transformResponse: (r) => r.data,
