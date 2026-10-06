@@ -12,12 +12,12 @@ Candidate: Rahul Rana
 7. Sign in as **Carol** and open Alice's document URL directly: "Document not found, or you do not have access" (the API returns 404).
 
 ## Links
-- **Live URL:** `TODO: add after deployment` (client, Vercel)
-- **API URL:** `TODO: add after deployment` (Render; health check at `/api/health`)
+- **Live URL:** https://document-manager-web-application.vercel.app (client, Vercel)
+- **API URL:** https://document-manager-web-application.onrender.com/api (Render; health check at `/api/health`)
 - **Walkthrough video:** see [WALKTHROUGH_URL.txt](WALKTHROUGH_URL.txt)
 - **Source:** this folder (`client/`, `server/`)
 
-> Deployment status: **not yet deployed or verified**. The application was developed and tested locally only. Fill in the URLs above once deployed and re-run steps 2–7 against the live site.
+> Deployment status: **deployed and verified.** On 2026-10-06 a real-browser test ran against the live site: login with the demo accounts, autosave and persistence after refresh, Markdown and CSV import, a named download, sharing to a viewer (viewer is read-only and the API returns 403 for its write), a stranger getting 404, and CORS allowing only the Vercel origin. The test documents were deleted afterwards.
 
 ## Demo accounts
 All three use the password `Demo@1234`, created by `npm run seed`. They are published on purpose so reviewers can test sharing.
@@ -36,7 +36,6 @@ All three use the password `Demo@1234`, created by `npm run seed`. They are publ
 | [AI_WORKFLOW.md](AI_WORKFLOW.md) | AI tools used, where they helped, what they got wrong, how it was verified |
 | [DEAD_CODE_AND_UNUSED.md](DEAD_CODE_AND_UNUSED.md) | Cleanup audit with evidence |
 | [WALKTHROUGH_URL.txt](WALKTHROUGH_URL.txt) | Link to the walkthrough video |
-| [docs/screenshots/](docs/screenshots) | Login, dashboard, editor, sharing, viewer, import error, phone layout |
 | `client/`, `server/` | Source code (React + Vite; Express + Mongoose) |
 | `docker-compose.yml`, `*/Dockerfile`, `client/nginx.conf` | Optional one-command local stack (not yet built or run, see README) |
 | `server/tests/` | Automated tests |
@@ -54,7 +53,16 @@ All three use the password `Demo@1234`, created by `npm run seed`. They are publ
 - `cd server && npm test`: 40 tests (Vitest + Supertest), including the IDOR matrix (stranger / viewer / editor / owner), persistence, share validation, hostile-file import, login and token handling.
 - `cd client && npm test`: 3 unit tests. `npm run lint` and `npm run build` pass.
 - Browser-level checks (Playwright, run during development) and an independent QA pass covering the full user journey, shortcuts, forged and expired tokens, and a phone-width layout. They are not committed to the repo.
-- **Not yet verified:** the production deployment.
+- Production deployment: verified as described above. Not verified: the optional Docker images (the Docker daemon was not running) and keyboard commits of native dropdown popups (not drivable in headless Chromium).
+
+## Optional stretch (the brief's list)
+| Stretch item | Status |
+|---|---|
+| Export to PDF or Markdown | **Done.** *File → Download as…* asks for a file name and a format: Word `.docx`, Markdown `.md`, plain text, web page, and PDF. PDF uses the browser's print dialog ("Save as PDF") with the chosen name; the other formats are generated in the browser. |
+| Role-based sharing beyond basic access | **Done.** Viewer and editor roles, plus owner-only actions (rename, share, revoke, delete), enforced on the server and covered by tests. |
+| Real-time collaboration indicators | Not built yet. |
+| Commenting or suggestion mode | Not built yet. The *Viewing mode* toggle is read-only viewing, not suggestions. |
+| Document version history | Not built yet. Concurrent edits are last-write-wins. |
 
 ## Intentionally deprioritised
 Real-time collaboration and presence, comments/suggestions, version history, PDF import, production-grade identity (SSO), rate limiting, object storage, Redis/queues (no workload justifies them; see [ARCHITECTURE.md](ARCHITECTURE.md)).
