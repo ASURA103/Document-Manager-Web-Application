@@ -1,5 +1,36 @@
 @import "tailwindcss";
 
-body {
-  @apply bg-zinc-950 text-zinc-100;
+.ProseMirror { min-height: 60vh; outline: none; }
+.ProseMirror h1 { font-size: 1.875rem; font-weight: 700; margin: 1rem 0 .5rem; }
+.ProseMirror h2 { font-size: 1.5rem; font-weight: 600; margin: .875rem 0 .5rem; }
+.ProseMirror ul { list-style: disc; padding-left: 1.5rem; margin: .5rem 0; }
+.ProseMirror ol { list-style: decimal; padding-left: 1.5rem; margin: .5rem 0; }
+.ProseMirror p { margin: .5rem 0; }
+.ProseMirror pre { background: #f1f5f9; padding: .75rem; border-radius: .375rem; overflow-x: auto; }
+.ProseMirror blockquote { border-left: 3px solid #cbd5e1; padding-left: 1rem; color: #475569; }
+
+/* Editor content extras (tasks, links, highlight, code) */
+.ProseMirror { font-size: 16px; line-height: 1.6; }
+.ProseMirror p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: #9aa0a6; float: left; height: 0; pointer-events: none; }
+.ProseMirror h3 { font-size: 1.25rem; font-weight: 600; margin: .75rem 0 .5rem; }
+.ProseMirror a { color: #1a0dab; text-decoration: underline; cursor: pointer; }
+.ProseMirror hr { border: 0; border-top: 1px solid #dadce0; margin: 1rem 0; }
+.ProseMirror code { background: #f1f3f4; padding: 0 .25rem; border-radius: .25rem; font-family: ui-monospace, Menlo, monospace; }
+.ProseMirror ul[data-type="taskList"] { list-style: none; padding-left: .25rem; }
+.ProseMirror ul[data-type="taskList"] li { display: flex; gap: .5rem; align-items: flex-start; }
+.ProseMirror ul[data-type="taskList"] li > label { margin-top: .25rem; user-select: none; }
+.ProseMirror ul[data-type="taskList"] li > div { flex: 1; }
+.ProseMirror ul[data-type="taskList"] li[data-checked="true"] > div { text-decoration: line-through; color: #80868b; }
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff !important; }
+  .page { box-shadow: none !important; max-width: none !important; padding: 0 !important; zoom: 1 !important; }
 }
+
+/* Tables */
+.ProseMirror table { border-collapse: collapse; width: 100%; margin: .75rem 0; table-layout: fixed; }
+.ProseMirror th, .ProseMirror td { border: 1px solid #c4c7c5; padding: .35rem .5rem; vertical-align: top; min-width: 3rem; }
+.ProseMirror th { background: #f1f3f4; font-weight: 600; text-align: left; }
+.ProseMirror td p, .ProseMirror th p { margin: 0; }
+.ProseMirror .selectedCell { background: #d3e3fd; }

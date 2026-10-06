@@ -1,37 +1,40 @@
 {
-  "name": "server",
+  "name": "ajaia-docs-server",
   "version": "1.0.0",
-  "description": "Backend for collaborative document editor",
-  "type": "module",
-  "main": "index.js",
-  "scripts": {
-    "start": "node index.js",
-    "server": "nodemon index.js",
-    "test": "jest"
+  "description": "Document manager API (Express + Mongoose)",
+  "main": "src/server.js",
+  "directories": {
+    "test": "tests"
   },
-  "keywords": [
-    "express",
-    "mongodb",
-    "jwt",
-    "mern"
-  ],
-  "author": "Rahul Rana",
+  "scripts": {
+    "test": "vitest run",
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "seed": "node src/seed.js"
+  },
+  "author": "",
   "license": "ISC",
+  "type": "module",
+  "private": "true",
   "dependencies": {
+    "@tiptap/extension-table": "^3.31.4",
+    "@tiptap/html": "^3.31.4",
+    "@tiptap/starter-kit": "^3.31.4",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.5",
     "express": "^5.2.1",
-    "express-validator": "^7.3.2",
+    "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
-    "mammoth": "^1.12.0",
-    "mongoose": "^9.7.3",
-    "multer": "^2.2.0",
-    "pdf2json": "^4.0.3"
+    "mammoth": "^1.13.0",
+    "marked": "^18.1.0",
+    "mongoose": "^9.11.0",
+    "multer": "^2.4.0",
+    "read-excel-file": "^9.3.10",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "jest": "^30.4.2",
-    "nodemon": "^3.1.14",
-    "supertest": "^7.2.2"
+    "supertest": "^7.3.1",
+    "vitest": "^5.0.3"
   }
 }

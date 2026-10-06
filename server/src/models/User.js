@@ -1,41 +1,23 @@
-import mongoose from "mongoose";
-import bcrypt from "bcryptjs";
+import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 const userSchema = new mongoose.Schema(
   {
-    name: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-      lowercase: true,
-      trim: true,
-    },
-    password: {
-      type: String,
-      required: true,
-      minlength: 6,
-      select: false,
-    },
+    name: { type: String, required: true, trim: true, maxlength: 80 },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    // Never returned by queries unless explicitly selected.
+    passwordHash: { type: String, required: true, select: false },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-// HASH PASSWORD
-userSchema.pre("save", async function () {
-  if (!this.isModified("password")) return;
-
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-});
-
-// COMPARE PASSWORD
-userSchema.methods.comparePassword = async function (enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
+const COST = 10;
+userSchema.statics.hashPassword = (plain) => bcrypt.hash(plain, COST);
+userSchema.methods.verifyPassword = function (plain) {
+  return bcrypt.compare(plain, this.passwordHash);
 };
 
-export default mongoose.model("User", userSchema);
+// Compared against when the email is unknown, so response time doesn't reveal which emails exist.
+export const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', COST);
+
+export const User = mongoose.model('User', userSchema);

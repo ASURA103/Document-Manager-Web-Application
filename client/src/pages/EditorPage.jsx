@@ -1,413 +1,337 @@
-import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-
-import Layout from "../components/Layout";
-
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
+import { FileText, Users } from 'lucide-react'
 import {
-  createDocument,
-  updateDocument,
-  getDocumentById,
-} from "../services/documentService";
+  errorMessage, useCreateDocumentMutation, useDeleteDocumentMutation, useGetDocumentQuery, useUpdateDocumentMutation,
+} from '../features/api.js'
+import { extensions } from '../editor/extensions.js'
+import { trimTrailingEmpty } from '../editor/trimTrailing.js'
+import useDocumentTitle from '../hooks/useDocumentTitle.js'
+import { exportDocx, exportHtml, exportMd, exportTxt, printDocument } from '../editor/exportDocument.js'
+import FormatToolbar from '../components/FormatToolbar.jsx'
+import MenuBar from '../components/MenuBar.jsx'
+import ShareDialog from '../components/ShareDialog.jsx'
+import LinkDialog from '../components/LinkDialog.jsx'
+import InfoDialog from '../components/InfoDialog.jsx'
+import UserMenu from '../components/UserMenu.jsx'
+import LeaveDialog from '../components/LeaveDialog.jsx'
+import DownloadDialog from '../components/DownloadDialog.jsx'
 
-import {
-  exportTXT,
-  exportPDF,
-  exportMD,
-  exportDOCX,
-} from "../utils/exportDocument";
+const AUTOSAVE_MS = 1500
+
+// Each state has a dot AND text, so state is never conveyed by colour alone.
+const STATUS = {
+  saved: { text: 'All changes saved', cls: 'text-slate-700', dot: 'bg-emerald-600' },
+  dirty: { text: 'Unsaved changes…', cls: 'text-amber-800', dot: 'bg-amber-600' },
+  saving: { text: 'Saving…', cls: 'text-slate-700', dot: 'bg-slate-500 animate-pulse' },
+  error: { text: 'Save failed — click to retry', cls: 'text-red-700', dot: 'bg-red-600' },
+}
+
+const SHORTCUTS = [
+  ['Bold', 'B'], ['Italic', 'I'], ['Underline', 'U'], ['Insert link', 'K'], ['Undo', 'Z'], ['Redo', 'Y'], ['Save now', 'S'], ['Print', 'P'],
+]
+
+function DocumentEditor({ doc }) {
+  const navigate = useNavigate()
+  const canWrite = doc.role === 'owner' || doc.role === 'editor'
+  const isOwner = doc.role === 'owner'
+  const mod = navigator.platform.includes('Mac') ? '⌘' : 'Ctrl+'
+
+  const [updateDocument] = useUpdateDocumentMutation()
+  const [createDocument] = useCreateDocumentMutation()
+  const [deleteDocument] = useDeleteDocumentMutation()
+
+  const [status, setStatusState] = useState('saved')
+  const [saveError, setSaveError] = useState(null)
+  const [title, setTitle] = useState(doc.title)
+  const [titleError, setTitleError] = useState(null)
+  const [viewMode, setViewMode] = useState(false)
+  const [zoom, setZoom] = useState(100)
+  const [showCount, setShowCount] = useState(true)
+  // Autosave preference is per browser and remembered; defaults to on.
+  const [autosave, setAutosave] = useState(() => { try { return localStorage.getItem('docs.autosave') !== 'off' } catch { return true } })
+  const autosaveRef = useRef(autosave)
+  const [dialog, setDialog] = useState(null) // 'share' | 'link' | 'count' | 'shortcuts'
+
+  const version = useRef(0) // bumped on each edit so a finished save can tell if more edits arrived
+  const saving = useRef(false)
+  const timer = useRef(null)
+  const titleRef = useRef(null)
+  const saveRef = useRef(() => {})
+  const statusRef = useRef('saved')
+  // Keep a ref in step with the state so async callbacks (leave checks) never read a stale value.
+  const setStatus = useCallback((value) => { statusRef.current = value; setStatusState(value) }, [])
+  const [leavePrompt, setLeavePrompt] = useState(null) // { resolve } while the Save changes? modal is open
+
+  const editor = useEditor({
+    extensions,
+    content: doc.content,
+    editable: canWrite,
+    onUpdate: () => {
+      version.current += 1
+      setStatus('dirty')
+      clearTimeout(timer.current)
+      if (autosaveRef.current) timer.current = setTimeout(() => saveRef.current(), AUTOSAVE_MS) // autosave after a pause in typing
+    },
+  })
+
+  // Only touch editability when it actually changes: calling setEditable on mount emits an
+  // "update" event, which would mark an untouched document dirty and autosave it just for opening it.
+  useEffect(() => {
+    const editable = canWrite && !viewMode
+    if (editor && editor.isEditable !== editable) editor.setEditable(editable, false)
+  }, [editor, canWrite, viewMode])
+
+  const save = useCallback(async () => {
+    if (!editor || !canWrite) return true
+    clearTimeout(timer.current)
+    if (saving.current) return false // a save is in flight; the finishing save re-schedules if edits arrived
+    saving.current = true
+    const savedVersion = version.current
+    setStatus('saving'); setSaveError(null)
+    const res = await updateDocument({ id: doc.id, content: trimTrailingEmpty(editor.getJSON()) })
+    saving.current = false
+    if (res.error) {
+      setStatus('error'); setSaveError(errorMessage(res.error, 'Unable to save document.'))
+      return false
+    } else if (version.current === savedVersion) {
+      setStatus('saved') // "saved" only after the server confirmed and nothing changed meanwhile
+    } else {
+      setStatus('dirty')
+      if (autosaveRef.current) timer.current = setTimeout(() => saveRef.current(), AUTOSAVE_MS)
+    }
+    return true
+  }, [editor, canWrite, updateDocument, doc.id, setStatus])
+  useEffect(() => { saveRef.current = save }, [save])
+  useEffect(() => () => clearTimeout(timer.current), [])
+
+  const commitTitle = async () => {
+    const next = title.trim()
+    if (next === doc.title) return setTitleError(null)
+    if (!next) { setTitle(doc.title); return setTitleError('Title cannot be empty.') }
+    const res = await updateDocument({ id: doc.id, title: next })
+    if (res.error) { setTitle(doc.title); return setTitleError(errorMessage(res.error, 'Unable to rename document.')) }
+    setTitle(res.data.title); setTitleError(null)
+  }
+
+  const openLink = useCallback(() => { if (canWrite && !viewMode) setDialog('link') }, [canWrite, viewMode])
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!(e.metaKey || e.ctrlKey)) return
+      const k = e.key.toLowerCase()
+      if (k === 's') { e.preventDefault(); save() }
+      else if (k === 'k') { e.preventDefault(); openLink() }
+    }
+    const onUnload = (e) => { if (status === 'dirty' || status === 'error') e.preventDefault() }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('beforeunload', onUnload)
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('beforeunload', onUnload) }
+  }, [save, openLink, status])
+
+  const counts = useEditorState({
+    editor,
+    selector: ({ editor: e }) => {
+      const text = e.getText({ blockSeparator: ' ' }).trim()
+      return { words: text ? text.split(/\s+/).length : 0, chars: text.length }
+    },
+  }) ?? { words: 0, chars: 0 }
+
+  const toggleAutosave = useCallback(() => {
+    const next = !autosaveRef.current
+    autosaveRef.current = next
+    setAutosave(next)
+    try { localStorage.setItem('docs.autosave', next ? 'on' : 'off') } catch { /* preference is optional */ }
+    clearTimeout(timer.current)
+    if (next && version.current > 0 && statusRef.current !== 'saved') saveRef.current() // turning it on flushes pending edits
+  }, [])
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+  // Leaving with unsaved edits opens a Save / Don't save / Cancel modal. Resolves true if it is OK to leave.
+  const canLeave = useCallback(async () => {
+    if (!canWrite) return true
+    for (let i = 0; i < 50 && saving.current; i += 1) await sleep(100) // let an in-flight save finish first
+    if (statusRef.current === 'saved') return true
+    return new Promise((resolve) => setLeavePrompt({ resolve }))
+  }, [canWrite])
+
+  const saveForLeave = async () => {
+    for (let i = 0; i < 50 && saving.current; i += 1) await sleep(100)
+    if (statusRef.current === 'saved') return true
+    return saveRef.current()
+  }
+  const decideLeave = (decision) => {
+    if (decision === 'discard') clearTimeout(timer.current) // nothing more should be sent for this document
+    leavePrompt?.resolve(decision !== 'cancel')
+    setLeavePrompt(null)
+  }
+
+  const actions = useMemo(() => ({
+    newDocument: async () => {
+      if (!(await canLeave())) return
+      const res = await createDocument()
+      if (!res.error) navigate(`/documents/${res.data.id}`)
+    },
+    goHome: async () => { if (await canLeave()) navigate('/') },
+    save: () => save(),
+    toggleAutosave,
+    share: () => setDialog('share'),
+    rename: () => titleRef.current?.focus(),
+    download: () => setDialog('download'),
+    print: printDocument,
+    remove: async () => {
+      if (!window.confirm(`Delete "${doc.title}" permanently? Shared access will be removed too.`)) return
+      clearTimeout(timer.current)
+      const res = await deleteDocument(doc.id)
+      if (res.error) return setSaveError(errorMessage(res.error, 'Unable to delete document.'))
+      navigate('/')
+    },
+    setViewMode, setZoom,
+    toggleCount: () => setShowCount((v) => !v),
+    link: openLink,
+    wordCount: () => setDialog('count'),
+    shortcuts: () => setDialog('shortcuts'),
+  }), [save, canLeave, toggleAutosave, createDocument, deleteDocument, navigate, doc.id, doc.title, openLink])
+
+  const doDownload = async (format, name) => {
+    if (format === 'docx') return exportDocx(editor, name)
+    if (format === 'md') return exportMd(editor, name)
+    if (format === 'txt') return exportTxt(editor, name)
+    if (format === 'html') return exportHtml(editor, name)
+    // pdf: close the modal first so it is not part of the printed page
+    setDialog(null)
+    await sleep(150)
+    return printDocument(name)
+  }
+
+  const applyLink = (url) => { editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run(); setDialog(null) }
+  const removeLink = () => { editor.chain().focus().extendMarkRange('link').unsetLink().run(); setDialog(null) }
+
+  const s = STATUS[status]
+  const readOnly = !canWrite || viewMode
+
+  return (
+    <div className="flex min-h-screen flex-col bg-[#f9fbfd]">
+      <header className="no-print sticky top-0 z-20 bg-[#f9fbfd]">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pt-2">
+          <Link to="/" aria-label="All documents" onClick={async (e) => { e.preventDefault(); if (await canLeave()) navigate('/') }} className="text-blue-600"><FileText size={32} strokeWidth={1.5} /></Link>
+          <div className="min-w-[10rem] flex-1">
+            {isOwner ? (
+              <input
+                ref={titleRef}
+                value={title}
+                maxLength={120}
+                aria-label="Document title"
+                onChange={(e) => setTitle(e.target.value)}
+                onBlur={commitTitle}
+                onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                className="w-full max-w-md truncate rounded border border-transparent px-1.5 text-lg hover:border-slate-400 focus:border-blue-600 focus:outline-none"
+              />
+            ) : (
+              <h1 title="Only the owner can rename this document" className="max-w-md cursor-default truncate px-1.5 text-lg">{doc.title}</h1>
+            )}
+            {titleError && <p role="alert" className="px-1.5 text-xs text-red-600">{titleError}</p>}
+          </div>
+          {canWrite ? (
+            <>
+              <button onClick={save} disabled={status === 'saving'} role="status" aria-live="polite" className={`flex items-center gap-1.5 text-sm ${s.cls} hover:underline disabled:no-underline`}>
+                <span aria-hidden="true" className={`h-2 w-2 rounded-full ${s.dot}`} />{s.text}
+              </button>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={autosave}
+                aria-label="Autosave"
+                onClick={toggleAutosave}
+                className="flex items-center gap-1.5 rounded-full border border-slate-300 px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-100"
+              >
+                <span aria-hidden="true" className={`relative inline-block h-3.5 w-6 rounded-full ${autosave ? 'bg-blue-600' : 'bg-slate-400'}`}>
+                  <span className={`absolute top-0.5 h-2.5 w-2.5 rounded-full bg-white transition-all ${autosave ? 'left-3' : 'left-0.5'}`} />
+                </span>
+                Autosave {autosave ? 'on' : 'off'}
+              </button>
+              <button
+                type="button"
+                onClick={save}
+                disabled={status === 'saving' || status === 'saved' || viewMode}
+                title="Save (Ctrl/Cmd+S)"
+                className="rounded-full bg-blue-700 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-800 disabled:bg-slate-300 disabled:text-slate-600"
+              >
+                Save
+              </button>
+            </>
+          ) : (
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-900">View only</span>
+          )}
+          <span className="hidden text-xs text-slate-600 sm:inline">{doc.role === 'owner' ? 'Owner' : `Owner: ${doc.owner?.name} · ${doc.role}`}</span>
+          <button
+            onClick={() => setDialog('share')}
+            disabled={!isOwner}
+            title={isOwner ? 'Share' : 'Only the owner can share'}
+            className="flex items-center gap-2 rounded-full bg-[#c2e7ff] px-5 py-2 text-sm font-medium text-[#001d35] hover:shadow disabled:opacity-50"
+          >
+            <Users size={16} /> Share
+          </button>
+          <UserMenu beforeSignOut={canLeave} />
+        </div>
+        <MenuBar editor={editor} autosave={autosave} canWrite={canWrite} isOwner={isOwner} viewMode={viewMode} zoom={zoom} showCount={showCount} actions={actions} />
+        {!readOnly && editor && <div className="py-1"><FormatToolbar editor={editor} onLink={openLink} /></div>}
+        {saveError && <p role="alert" className="px-4 py-1 text-sm text-red-600">{saveError}</p>}
+      </header>
+
+      <main className="flex-1 overflow-auto bg-[#f9fbfd] px-2 py-4 print:p-0">
+        <div className="page mx-auto w-full min-h-[1056px] max-w-[816px] bg-white px-6 py-10 shadow-[0_0_0_1px_#dadce0] sm:px-[72px]" style={{ zoom: zoom / 100 }}>
+          <EditorContent editor={editor} />
+        </div>
+      </main>
+
+      {showCount && (
+        <footer className="no-print border-t border-slate-200 bg-white px-4 py-1 text-xs text-slate-600">
+          {counts.words} words · {counts.chars} characters · Your access: <span className="font-medium">{doc.role}</span>{viewMode && ' · Viewing mode'}
+        </footer>
+      )}
+
+      {leavePrompt && <LeaveDialog title={doc.title} onSave={saveForLeave} onDecision={decideLeave} />}
+      {dialog === 'download' && <DownloadDialog defaultName={doc.title} onDownload={doDownload} onClose={() => setDialog(null)} />}
+      {dialog === 'share' && <ShareDialog documentId={doc.id} onClose={() => setDialog(null)} />}
+      {dialog === 'link' && (
+        <LinkDialog initial={editor.getAttributes('link').href || ''} onApply={applyLink} onRemove={removeLink} onClose={() => setDialog(null)} />
+      )}
+      {dialog === 'count' && (
+        <InfoDialog title="Word count" onClose={() => setDialog(null)}>
+          <p>Words: <b>{counts.words}</b></p>
+          <p>Characters: <b>{counts.chars}</b></p>
+        </InfoDialog>
+      )}
+      {dialog === 'shortcuts' && (
+        <InfoDialog title="Keyboard shortcuts" onClose={() => setDialog(null)}>
+          <ul className="space-y-1">{SHORTCUTS.map(([n, k]) => <li key={n} className="flex justify-between"><span>{n}</span><kbd className="rounded bg-slate-100 px-1.5">{mod}{k}</kbd></li>)}</ul>
+        </InfoDialog>
+      )}
+    </div>
+  )
+}
 
 export default function EditorPage() {
-  const navigate = useNavigate();
-const { id } = useParams();
+  const { id } = useParams()
+  const { data, isLoading, error, refetch } = useGetDocumentQuery(id)
+  useDocumentTitle(data ? `${data.title} – Docs` : error ? 'Document not found – Docs' : 'Docs')
 
-const isNew = !id || id === "new";
-
-  const editorRef = useRef(null);
-  const changeFontSize = (size) => {
-    document.execCommand("fontSize", false, size);
-  };
-
-  const [title, setTitle] = useState("");
-  const [downloadOpen, setDownloadOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  // ===========================
-  // LOAD DOCUMENT
-  // ===========================
-
-  useEffect(() => {
-    if (isNew) {
-      setTitle("");
-
-      if (editorRef.current) {
-        editorRef.current.innerHTML = "";
-      }
-
-      return;
-    }
-
-    const loadDocument = async () => {
-      try {
-        setLoading(true);
-
-        const res = await getDocumentById(id);
-
-        const doc = res.data.document || res.data;
-
-        setTitle(doc.title || "");
-
-        setTimeout(() => {
-          if (editorRef.current) {
-            editorRef.current.innerHTML = doc.content || "";
-            editorRef.current.focus();
-          }
-        }, 50);
-      } catch (err) {
-        console.log(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadDocument();
-  }, [id]);
-
-  // ===========================
-  // FORMAT FUNCTIONS
-  // ===========================
-
-  const format = (command, value = null) => {
-    document.execCommand(command, false, value);
-  };
-
-  const heading1 = () => {
-    document.execCommand("formatBlock", false, "<h1>");
-  };
-
-  const heading2 = () => {
-    document.execCommand("formatBlock", false, "<h2>");
-  };
-
-  const paragraph = () => {
-    document.execCommand("formatBlock", false, "<p>");
-  };
-
-  const bulletList = () => {
-    document.execCommand("insertUnorderedList");
-  };
-
-  const numberList = () => {
-    document.execCommand("insertOrderedList");
-  };
-
-  // ===========================
-  // SAVE DOCUMENT
-  // ===========================
-
-  const handleSave = async () => {
-    const content = editorRef.current.innerHTML;
-
-    if (!title.trim()) {
-      alert("Please enter document title");
-      return;
-    }
-
-    try {
-      if (isNew) {
-        await createDocument({
-          title,
-          content,
-        });
-      } else {
-        await updateDocument(id, {
-          title,
-          content,
-        });
-      }
-
-      alert("Document Saved Successfully");
-      setTimeout(() => {
-    navigate("/dashboard");
-}, 500);
-    } catch (err) {
-      console.log(err);
-      alert("Unable to save document.");
-    }
-  };
-
-  // ===========================
-  // EXPORT
-  // ===========================
-
-  const plainText = () => {
-    return editorRef.current.innerText;
-  };
-
-  const downloadTXT = () => {
-    exportTXT(title, plainText());
-    setDownloadOpen(false);
-  };
-
-  const downloadMD = () => {
-    exportMD(title, plainText());
-    setDownloadOpen(false);
-  };
-
-  const downloadPDF = () => {
-    exportPDF(title, plainText());
-    setDownloadOpen(false);
-  };
-
-  const downloadDOCX = async () => {
-    await exportDOCX(title, plainText());
-    setDownloadOpen(false);
-  };
-  useEffect(() => {
-    const close = () => setDownloadOpen(false);
-
-    window.addEventListener("click", close);
-
-    return () => window.removeEventListener("click", close);
-  }, []);
-  return (
-    <Layout>
-      <div className="flex flex-col h-full bg-zinc-950 text-white">
-        {/* ================= HEADER ================= */}
-
-        <div className="flex items-center justify-between border-b border-zinc-800 px-6 py-4">
-          <div>
-            <h2 className="text-xl font-semibold">
-              {isNew ? "Create Document" : "Edit Document"}
-            </h2>
-
-            <p className="text-sm text-zinc-400">
-              {isNew
-                ? "Create a rich text document"
-                : "Edit your saved document"}
-            </p>
-          </div>
-
-          <div className="flex gap-3">
-            <button
-              onClick={() => navigate("/dashboard")}
-              className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 transition"
-            >
-              Back
-            </button>
-
-            <div className="relative">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDownloadOpen(!downloadOpen);
-                }}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 transition"
-              >
-                Download
-              </button>
-
-              {downloadOpen && (
-                <div className="absolute right-0 mt-2 w-44 rounded-lg bg-zinc-900 border border-zinc-700 shadow-xl z-50">
-                  <button
-                    onClick={downloadTXT}
-                    className="w-full text-left px-4 py-2 hover:bg-zinc-800"
-                  >
-                    .txt
-                  </button>
-
-                  <button
-                    onClick={downloadMD}
-                    className="w-full text-left px-4 py-2 hover:bg-zinc-800"
-                  >
-                    .md
-                  </button>
-
-                  <button
-                    onClick={downloadPDF}
-                    className="w-full text-left px-4 py-2 hover:bg-zinc-800"
-                  >
-                    .pdf
-                  </button>
-
-                  <button
-                    onClick={downloadDOCX}
-                    className="w-full text-left px-4 py-2 hover:bg-zinc-800"
-                  >
-                    .docx
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={handleSave}
-              className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition"
-            >
-              Save
-            </button>
-          </div>
-        </div>
-
-        {/* ================= TITLE ================= */}
-
-        <div className="px-6 pt-5">
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Document Name"
-            className="w-full bg-transparent border-b border-zinc-700 pb-3 text-3xl font-bold outline-none"
-          />
-        </div>
-
-        {/* ================= TOOLBAR ================= */}
-
-        <div className="flex flex-wrap gap-2 px-6 py-4 border-b border-zinc-800 bg-zinc-900">
-          <select
-            onChange={(e) => changeFontSize(e.target.value)}
-            className="bg-zinc-800 px-2 rounded"
-            defaultValue=""
-          >
-            <option value="" disabled>
-              Size
-            </option>
-            <option value="2">12</option>
-            <option value="3">16</option>
-            <option value="4">18</option>
-            <option value="5">24</option>
-            <option value="6">32</option>
-          </select>
-          <button
-            onClick={() => format("bold")}
-            className="px-3 py-2 rounded bg-zinc-800 hover:bg-zinc-700"
-          >
-            <strong>B</strong>
-          </button>
-
-          <button
-            onClick={() => format("italic")}
-            className="px-3 py-2 rounded bg-zinc-800 hover:bg-zinc-700 italic"
-          >
-            I
-          </button>
-
-          <button
-            onClick={() => format("underline")}
-            className="px-3 py-2 rounded bg-zinc-800 hover:bg-zinc-700 underline"
-          >
-            U
-          </button>
-
-          <button
-            onClick={heading1}
-            className="px-3 py-2 rounded bg-zinc-800 hover:bg-zinc-700"
-          >
-            H1
-          </button>
-
-          <button
-            onClick={heading2}
-            className="px-3 py-2 rounded bg-zinc-800 hover:bg-zinc-700"
-          >
-            H2
-          </button>
-
-          <button
-            onClick={paragraph}
-            className="px-3 py-2 rounded bg-zinc-800 hover:bg-zinc-700"
-          >
-            P
-          </button>
-
-          <button
-            onClick={bulletList}
-            className="px-3 py-2 rounded bg-zinc-800 hover:bg-zinc-700"
-          >
-            • List
-          </button>
-
-          <button
-            onClick={numberList}
-            className="px-3 py-2 rounded bg-zinc-800 hover:bg-zinc-700"
-          >
-            1. List
-          </button>
-          <button
-            onClick={() => format("justifyLeft")}
-            className="px-3 py-2 rounded bg-zinc-800"
-          >
-            Left
-          </button>
-
-          <button
-            onClick={() => format("justifyCenter")}
-            className="px-3 py-2 rounded bg-zinc-800"
-          >
-            Center
-          </button>
-
-          <button
-            onClick={() => format("justifyRight")}
-            className="px-3 py-2 rounded bg-zinc-800"
-          >
-            Right
-          </button>
-          <button
-            onClick={() => format("undo")}
-            className="px-3 py-2 rounded bg-zinc-800"
-          >
-            Undo
-          </button>
-
-          <button
-            onClick={() => format("redo")}
-            className="px-3 py-2 rounded bg-zinc-800"
-          >
-            Redo
-          </button>
-        </div>
-        {/* ================= DOCUMENT PAGE ================= */}
-
-        <div className="flex-1 overflow-auto bg-zinc-800 py-10">
-          {loading ? (
-            <div className="flex justify-center mt-20">
-              <h2 className="text-lg">Loading document...</h2>
-            </div>
-          ) : (
-            <div className="flex justify-center">
-              <div
-                className="
-                  bg-white
-                  text-black
-                  w-[794px]
-                  min-h-[1100px]
-                  shadow-2xl
-                  rounded-md
-                  p-12
-                "
-              >
-                <div
-                  ref={editorRef}
-                  contentEditable
-                  suppressContentEditableWarning
-                  spellCheck={true}
-                  className="
-                    outline-none
-                    min-h-[950px]
-                    text-[17px]
-                    leading-8
-                    prose
-                    max-w-none
-                  "
-                  style={{
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
-                />
-              </div>
-            </div>
-          )}
+  if (isLoading) return <p className="p-6 text-sm text-slate-600">Loading document…</p>
+  if (error) {
+    const notFound = error.status === 404 || error.status === 400
+    return (
+      <div role="alert" className="m-6 max-w-lg rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <p>{notFound ? 'Document not found, or you do not have access to it.' : errorMessage(error, 'Unable to load document.')}</p>
+        <div className="mt-2 flex gap-3">
+          {!notFound && <button onClick={refetch} className="underline">Retry</button>}
+          <Link to="/" className="underline">Back to documents</Link>
         </div>
       </div>
-    </Layout>
-  );
+    )
+  }
+  // key: a different document id always gets a fresh editor instance.
+  return <DocumentEditor key={data.id} doc={data} />
 }

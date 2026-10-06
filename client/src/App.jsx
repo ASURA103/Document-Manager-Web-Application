@@ -1,58 +1,22 @@
-import { Routes, Route } from "react-router-dom";
+import { Navigate, Route, Routes } from 'react-router-dom'
+import { useSelector } from 'react-redux'
+import LoginPage from './pages/LoginPage.jsx'
+import DashboardPage from './pages/DashboardPage.jsx'
+import EditorPage from './pages/EditorPage.jsx'
 
-import Landing from "./pages/LandingPage";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
-import Dashboard from "./pages/Dashboard";
-import EditorPage from "./pages/EditorPage";
-import NotFound from "./pages/NotFound";
-
-import ProtectedRoute from "./components/ProtectedRoute";
-
-function App() {
-  return (
-    <Routes>
-
-      {/* PUBLIC ROUTES */}
-      <Route path="/" element={<Landing />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
-
-      {/* PROTECTED ROUTES */}
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
-
-      {/* CREATE NEW DOCUMENT (IMPORTANT FIX) */}
-      <Route
-        path="/document/new"
-        element={
-          <ProtectedRoute>
-            <EditorPage />
-          </ProtectedRoute>
-        }
-      />
-
-      {/* EDIT EXISTING DOCUMENT */}
-      <Route
-        path="/document/:id"
-        element={
-          <ProtectedRoute>
-            <EditorPage />
-          </ProtectedRoute>
-        }
-      />
-
-      {/* 404 */}
-      <Route path="*" element={<NotFound />} />
-
-    </Routes>
-  );
+function RequireAuth({ children }) {
+  const token = useSelector((s) => s.auth.token)
+  return token ? children : <Navigate to="/login" replace />
 }
 
-export default App;
+// Each page renders its own header (home bar vs. editor menus), like Google Docs.
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/" element={<RequireAuth><DashboardPage /></RequireAuth>} />
+      <Route path="/documents/:id" element={<RequireAuth><EditorPage /></RequireAuth>} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
+}

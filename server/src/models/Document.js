@@ -1,67 +1,15 @@
-import mongoose from "mongoose";
+import mongoose from 'mongoose';
+
+export const TITLE_MAX = 120;
 
 const documentSchema = new mongoose.Schema(
   {
-    // File Name / Document Title
-    title: {
-      type: String,
-      required: [true, "Document title is required"],
-      trim: true,
-      maxlength: 150,
-      default: "Untitled Document",
-    },
-
-    // Rich Text HTML Content
-    content: {
-      type: String,
-      default: "",
-      trim: true,
-    },
-
-    // Document Owner
-    owner: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-      index: true,
-    },
-
-    // Shared Users
-    sharedWith: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-      },
-    ],
-
-    // Imported File Information
-    importedFile: {
-      fileName: {
-        type: String,
-        default: "",
-      },
-
-      fileType: {
-        type: String,
-        default: "",
-      },
-    },
+    title: { type: String, required: true, trim: true, minlength: 1, maxlength: TITLE_MAX },
+    // Tiptap/ProseMirror JSON; shape is validated at the API boundary.
+    content: { type: mongoose.Schema.Types.Mixed, required: true },
+    owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   },
-  {
-    timestamps: true,
-    optimisticConcurrency: true,
-  }
+  { timestamps: true, minimize: false },
 );
 
-// Prevent duplicate users in sharedWith
-documentSchema.pre("save", async function () {
-  if (this.sharedWith?.length) {
-    this.sharedWith = [
-      ...new Set(this.sharedWith.map((id) => id.toString())),
-    ];
-  }
-});
-
-const Document = mongoose.model("Document", documentSchema);
-
-export default Document;
+export const Document = mongoose.model('Document', documentSchema);
