@@ -1,5 +1,6 @@
 import * as documents from '../services/document.service.js';
 import * as shares from '../services/share.service.js';
+import * as versions from '../services/version.service.js';
 import { importDocument } from '../services/import.service.js';
 
 const ok = (res, data, status = 200) => res.status(status).json({ success: true, data });
@@ -14,6 +15,10 @@ export const remove = async (req, res) => {
   await documents.deleteDocument(req.user, req.params.id);
   ok(res, { deleted: true });
 };
+
+export const listVersions = async (req, res) => ok(res, await versions.listVersions(req.user, req.params.id));
+export const getVersion = async (req, res) => ok(res, await versions.getVersion(req.user, req.params.id, req.params.versionId));
+export const restoreVersion = async (req, res) => ok(res, await versions.restoreVersion(req.user, req.params.id, req.params.versionId));
 
 export const listShares = async (req, res) => ok(res, await shares.listShares(req.user, req.params.id));
 export const addShare = async (req, res) =>

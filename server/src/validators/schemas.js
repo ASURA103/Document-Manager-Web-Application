@@ -24,4 +24,5 @@ export const shareDocumentSchema = z.object({
 });
 
 export const idParams = z.object({ id: objectId });
+export const versionParams = z.object({ id: objectId, versionId: objectId });
 export const shareParams = z.object({ id: objectId, userId: objectId });

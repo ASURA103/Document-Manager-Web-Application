@@ -5,7 +5,7 @@ import { validate } from '../middleware/validate.js';
 import * as auth from '../controllers/auth.controller.js';
 import * as docs from '../controllers/document.controller.js';
 import {
-  loginSchema, createDocumentSchema, updateDocumentSchema, shareDocumentSchema, idParams, shareParams,
+  loginSchema, createDocumentSchema, updateDocumentSchema, shareDocumentSchema, idParams, shareParams, versionParams,
 } from '../validators/schemas.js';
 
 export function buildRouter({ jwtSecret }) {
@@ -24,6 +24,10 @@ export function buildRouter({ jwtSecret }) {
   router.get('/documents/:id', validate({ params: idParams }), docs.get);
   router.patch('/documents/:id', validate({ params: idParams, body: updateDocumentSchema }), docs.update);
   router.delete('/documents/:id', validate({ params: idParams }), docs.remove);
+
+  router.get('/documents/:id/versions', validate({ params: idParams }), docs.listVersions);
+  router.get('/documents/:id/versions/:versionId', validate({ params: versionParams }), docs.getVersion);
+  router.post('/documents/:id/versions/:versionId/restore', validate({ params: versionParams }), docs.restoreVersion);
 
   router.get('/documents/:id/shares', validate({ params: idParams }), docs.listShares);
   router.post('/documents/:id/shares', validate({ params: idParams, body: shareDocumentSchema }), docs.addShare);

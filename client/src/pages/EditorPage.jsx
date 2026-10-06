@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
-import { FileText, Users } from 'lucide-react'
+import { FileText, History, Users } from 'lucide-react'
 import {
-  errorMessage, useCreateDocumentMutation, useDeleteDocumentMutation, useGetDocumentQuery, useUpdateDocumentMutation,
+  errorMessage, useCreateDocumentMutation, useDeleteDocumentMutation, useGetDocumentQuery, useRestoreVersionMutation, useUpdateDocumentMutation,
 } from '../features/api.js'
 import { extensions } from '../editor/extensions.js'
 import { trimTrailingEmpty } from '../editor/trimTrailing.js'
@@ -15,6 +15,8 @@ import ShareDialog from '../components/ShareDialog.jsx'
 import LinkDialog from '../components/LinkDialog.jsx'
 import InfoDialog from '../components/InfoDialog.jsx'
 import UserMenu from '../components/UserMenu.jsx'
+import SidePanel from '../components/SidePanel.jsx'
+import HistoryPanel from '../components/HistoryPanel.jsx'
 import LeaveDialog from '../components/LeaveDialog.jsx'
 import DownloadDialog from '../components/DownloadDialog.jsx'
 
@@ -41,6 +43,8 @@ function DocumentEditor({ doc }) {
   const [updateDocument] = useUpdateDocumentMutation()
   const [createDocument] = useCreateDocumentMutation()
   const [deleteDocument] = useDeleteDocumentMutation()
+  const [restoreVersion] = useRestoreVersionMutation()
+  const [panel, setPanel] = useState(null) // null | 'history'
 
   const [status, setStatusState] = useState('saved')
   const [saveError, setSaveError] = useState(null)
@@ -180,6 +184,7 @@ function DocumentEditor({ doc }) {
     share: () => setDialog('share'),
     rename: () => titleRef.current?.focus(),
     download: () => setDialog('download'),
+    history: () => setPanel('history'),
     print: printDocument,
     remove: async () => {
       if (!window.confirm(`Delete "${doc.title}" permanently? Shared access will be removed too.`)) return
@@ -204,6 +209,21 @@ function DocumentEditor({ doc }) {
     setDialog(null)
     await sleep(150)
     return printDocument(name)
+  }
+
+  // Restoring replaces the document content on the server. Unsaved edits are saved first so they are
+  // kept in the history instead of being silently overwritten.
+  const restoreFromHistory = async (versionId) => {
+    if (statusRef.current === 'dirty' || statusRef.current === 'error') {
+      const saved = await saveRef.current()
+      if (!saved) return { ok: false, message: 'Your current changes could not be saved, so nothing was restored.' }
+    }
+    const res = await restoreVersion({ id: doc.id, versionId })
+    if (res.error) return { ok: false, message: errorMessage(res.error, 'Unable to restore this version.') }
+    clearTimeout(timer.current)
+    editor.commands.setContent(res.data.content, { emitUpdate: false }) // no update event: it must not look like an unsaved edit
+    setStatus('saved')
+    return { ok: true }
   }
 
   const applyLink = (url) => { editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run(); setDialog(null) }
@@ -274,6 +294,16 @@ function DocumentEditor({ doc }) {
           >
             <Users size={16} /> Share
           </button>
+          <button
+            type="button"
+            aria-label="Version history"
+            aria-pressed={panel === 'history'}
+            title="Version history"
+            onClick={() => setPanel((p) => (p === 'history' ? null : 'history'))}
+            className={`rounded-full p-2 text-slate-700 hover:bg-slate-200 ${panel === 'history' ? 'bg-blue-100' : ''}`}
+          >
+            <History size={18} />
+          </button>
           <UserMenu beforeSignOut={canLeave} />
         </div>
         <MenuBar editor={editor} autosave={autosave} canWrite={canWrite} isOwner={isOwner} viewMode={viewMode} zoom={zoom} showCount={showCount} actions={actions} />
@@ -281,11 +311,18 @@ function DocumentEditor({ doc }) {
         {saveError && <p role="alert" className="px-4 py-1 text-sm text-red-600">{saveError}</p>}
       </header>
 
-      <main className="flex-1 overflow-auto bg-[#f9fbfd] px-2 py-4 print:p-0">
+      <div className="flex min-h-0 flex-1">
+      <main className="min-w-0 flex-1 overflow-auto bg-[#f9fbfd] px-2 py-4 print:p-0">
         <div className="page mx-auto w-full min-h-[1056px] max-w-[816px] bg-white px-6 py-10 shadow-[0_0_0_1px_#dadce0] sm:px-[72px]" style={{ zoom: zoom / 100 }}>
           <EditorContent editor={editor} />
         </div>
       </main>
+      {panel && (
+        <SidePanel tabs={[{ id: 'history', label: 'History' }]} active={panel} onTab={setPanel} onClose={() => setPanel(null)}>
+          {panel === 'history' && <HistoryPanel documentId={doc.id} canRestore={canWrite && !viewMode} onRestore={restoreFromHistory} />}
+        </SidePanel>
+      )}
+      </div>
 
       {showCount && (
         <footer className="no-print border-t border-slate-200 bg-white px-4 py-1 text-xs text-slate-600">

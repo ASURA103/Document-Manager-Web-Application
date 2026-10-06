@@ -25,7 +25,7 @@ export const errorMessage = (err, fallback = 'Something went wrong.') =>
 export const api = createApi({
   reducerPath: 'api',
   baseQuery: baseQueryWithAuth,
-  tagTypes: ['Docs', 'Doc', 'Shares'],
+  tagTypes: ['Docs', 'Doc', 'Shares', 'Versions', 'Comments'],
   endpoints: (b) => ({
     login: b.mutation({
       query: (credentials) => ({ url: '/auth/login', method: 'POST', body: credentials }),
@@ -67,7 +67,24 @@ export const api = createApi({
         try {
           const { data } = await queryFulfilled
           dispatch(api.util.updateQueryData('getDocument', id, (draft) => { Object.assign(draft, data) }))
-          dispatch(api.util.invalidateTags(['Docs']))
+          dispatch(api.util.invalidateTags(['Docs', { type: 'Versions', id }]))
+        } catch { /* surfaced by the caller */ }
+      },
+    }),
+    getVersions: b.query({
+      query: (id) => `/documents/${id}/versions`,
+      transformResponse: (r) => r.data,
+      providesTags: (_r, _e, id) => [{ type: 'Versions', id }],
+    }),
+    getVersion: b.query({ query: ({ id, versionId }) => `/documents/${id}/versions/${versionId}`, transformResponse: (r) => r.data }),
+    restoreVersion: b.mutation({
+      query: ({ id, versionId }) => ({ url: `/documents/${id}/versions/${versionId}/restore`, method: 'POST' }),
+      transformResponse: (r) => r.data,
+      async onQueryStarted({ id }, { dispatch, queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled
+          dispatch(api.util.updateQueryData('getDocument', id, (draft) => { draft.content = data.content; draft.updatedAt = data.updatedAt }))
+          dispatch(api.util.invalidateTags(['Docs', { type: 'Versions', id }]))
         } catch { /* surfaced by the caller */ }
       },
     }),
@@ -96,5 +113,6 @@ export const {
   useLoginMutation,
   useGetDocumentsQuery, useGetDocumentQuery, useCreateDocumentMutation, useImportDocumentMutation,
   useUpdateDocumentMutation, useDeleteDocumentMutation,
+  useGetVersionsQuery, useGetVersionQuery, useRestoreVersionMutation,
   useGetSharesQuery, useAddShareMutation, useRemoveShareMutation,
 } = api

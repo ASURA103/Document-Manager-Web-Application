@@ -14,6 +14,7 @@ export default function MenuBar({ editor, autosave, canWrite, isOwner, viewMode,
         <MenuItem onClick={actions.newDocument}>New document</MenuItem>
         <MenuItem onClick={actions.goHome}>All documents</MenuItem>
         <MenuDivider />
+        <MenuItem onClick={actions.history}>Version history</MenuItem>
         <MenuItem shortcut={`${mod}S`} disabled={W} onClick={actions.save}>Save now</MenuItem>
         <MenuItem active={autosave} disabled={!canWrite} onClick={actions.toggleAutosave}>Autosave: {autosave ? 'On' : 'Off'}</MenuItem>
         <MenuDivider />

@@ -3,6 +3,7 @@ import { DocumentShare } from '../models/DocumentShare.js';
 import { emptyDoc } from '../utils/tiptap.js';
 import { authorizeDocument } from './access.service.js';
 import { AppError } from '../utils/AppError.js';
+import { deleteVersionsFor, snapshotBeforeOverwrite } from './version.service.js';
 
 const summary = (doc, role) => ({
   id: doc.id,
@@ -54,7 +55,11 @@ export async function updateDocument(user, id, { title, content }) {
     throw new AppError(403, 'FORBIDDEN', 'You do not have permission to perform this action.');
   }
   if (title !== undefined) doc.title = title;
-  if (content !== undefined) doc.content = content;
+  if (content !== undefined && JSON.stringify(content) !== JSON.stringify(doc.content)) {
+    await snapshotBeforeOverwrite(doc); // history: keep the previous content (rate-limited, capped)
+    doc.content = content;
+    doc.lastModifiedBy = user._id;
+  }
   await doc.save();
   await doc.populate('owner', 'name email');
   return serializeDocument(doc, role);
@@ -62,5 +67,5 @@ export async function updateDocument(user, id, { title, content }) {
 
 export async function deleteDocument(user, id) {
   const { doc } = await authorizeDocument(id, user, 'manage');
-  await Promise.all([doc.deleteOne(), DocumentShare.deleteMany({ document: doc._id })]);
+  await Promise.all([doc.deleteOne(), DocumentShare.deleteMany({ document: doc._id }), deleteVersionsFor(doc._id)]);
 }
