@@ -17,6 +17,9 @@ A lightweight collaborative document editor inspired by Google Docs, built as a 
 - Dashboard: list-first view (grid optional, remembered), live search (press `/` to focus, Esc or the X to clear), owner and modified columns.
 - **File import** into a new editable document (click the tile or drag a file onto it); blank lines in `.txt` files are paragraph separators, not stored as empty paragraphs: `.txt`, `.md`, `.html`, `.csv`, `.tsv`, `.docx`, `.xlsx`. Maximum 1 MB. Spreadsheets and CSVs become tables (up to 1000 rows × 30 columns, 5 sheets).
 - **Download as…** modal: choose a **file name** and a **format** (`.docx`, PDF, `.md`, `.txt`, `.html`). PDF uses the browser's print dialog, with the chosen name as the default file name.
+- **Version history:** earlier versions are saved automatically as a document changes (at most one every 5 minutes, newest 30 kept). A side panel lists them, previews an old version and restores it (owner/editor). Restoring keeps the replaced content in the history, so it can be undone. View-only users can read the history.
+- **Comments:** document-level comments in a side panel, with an open-comment badge. Anyone who can open the document may comment, including view-only users; authors can resolve and delete their own, owners and editors can resolve any, owners can delete any. Comments are plain text.
+- **Presence:** small avatars show who else has the document open right now (heartbeat every 10 s, entries expire after 25 s).
 - **Sharing** by email with `viewer` or `editor` permission, from the editor's Share button or the **⋮ menu on any dashboard row**; owner can list and revoke. The dashboard separates **My documents** from **Shared with me** (with owner and role).
 - Server-side authorization on every document route; a user with no access gets `404` (existence is not revealed), a user with insufficient permission gets `403`.
 
@@ -74,8 +77,8 @@ Created by `npm run seed`. All use the password **`Demo@1234`** (published on pu
 
 ## Testing
 ```bash
-cd server && npm test   # 40 tests (Vitest + Supertest) against a local MongoDB
-cd client && npm test   # 3 unit tests
+cd server && npm test   # 74 tests (Vitest + Supertest) against a local MongoDB
+cd client && npm test   # 6 unit tests
 cd client && npm run lint && npm run build
 ```
 Server tests need a reachable MongoDB (default `mongodb://127.0.0.1:27017`; override the base with `MONGODB_URI_TEST`). Each test file creates and drops its own database, so your data is never touched.
@@ -102,9 +105,18 @@ All routes are under `/api`; responses are `{ "success": true, "data": … }` or
 | GET / PATCH / DELETE | `/documents/:id` | PATCH takes `title` (owner) and/or `content` (owner, editor); DELETE owner only |
 | GET / POST | `/documents/:id/shares` | owner only; POST `{ email, permission }` |
 | DELETE | `/documents/:id/shares/:userId` | owner only |
+| GET | `/documents/:id/versions` | version list (no content), newest first; any role |
+| GET | `/documents/:id/versions/:versionId` | one version with content; any role |
+| POST | `/documents/:id/versions/:versionId/restore` | owner, editor |
+| GET / POST | `/documents/:id/comments` | any role; POST `{ body }` (1-2000 chars) |
+| PATCH / DELETE | `/documents/:id/comments/:commentId` | PATCH `{ resolved }`: owner/editor or author; DELETE: owner or author |
+| POST / DELETE | `/documents/:id/presence` | heartbeat (returns who is here) / leave; any role |
 
 ## Known limitations
-- No real-time collaboration; concurrent edits are last-write-wins (no version check).
+- No real-time *co-editing*; concurrent edits are last-write-wins (no version check), though history lets you recover an earlier version.
+- Presence is approximate: it is kept in the API process's memory (resets on restart, per instance) with a 25 s expiry. No cursors or live text. A multi-instance deployment would need a shared store (e.g. Redis), which this project deliberately does not add.
+- Comments are per document, not anchored to text ranges, and there is no suggestion (track-changes) mode.
+- History snapshots are rate-limited (one per 5 minutes) and capped at 30 per document, so very quick edits between snapshots are not individually recoverable.
 - Authentication is demo-grade: seeded users with a shared password, a 12-hour JWT kept in `localStorage`, no server-side revocation, no login rate limiting, no sign-up.
 - Delete is permanent (no trash).
 - The browser Back button is not intercepted, so going back with unsaved changes (autosave off) does not show the Save changes? modal; leaving via the app's own controls does.
@@ -113,4 +125,4 @@ All routes are under `/api`; responses are `{ "success": true, "data": … }` or
 - Only the owner can rename (editors can edit content).
 
 ## Future improvements
-Real-time presence and collaboration, optimistic concurrency control and version history, comments and suggestions, PDF import, per-document activity log, rate limiting, proper identity (SSO/OIDC), object storage for attachments.
+Real-time co-editing (e.g. Yjs), optimistic concurrency control, comments anchored to text and suggestion mode, named versions, PDF import, per-document activity log, rate limiting, proper identity (SSO/OIDC), object storage for attachments.

@@ -34,7 +34,9 @@ Responses are always `{ success, data }` or `{ success: false, error: { code, me
 | Collection | Fields | Notes |
 |---|---|---|
 | `users` | name, email (unique, lowercase), passwordHash (`select: false`) | bcrypt, cost 10 |
-| `documents` | title (1–120), content (Tiptap JSON), owner → user | index on owner |
+| `documents` | title (1–120), content (Tiptap JSON), owner → user, lastModifiedBy → user | index on owner |
+| `documentversions` | document → doc, title, content (Tiptap JSON), author → user, createdAt | history snapshots; index on (document, createdAt desc); newest 30 kept per document |
+| `comments` | document → doc, author → user, body (1-2000), resolved | index on (document, createdAt); deleted with the document |
 | `documentshares` | document → doc, user → user, permission (`viewer` \| `editor`) | **unique index on (document, user)**; index on user |
 
 Sharing is its own collection (not an array on the document) so "documents shared with me" is one indexed query by `user`, and duplicates are impossible even under concurrent requests (the race is caught as a duplicate-key error → `409`).
@@ -54,6 +56,12 @@ Demo-grade by design for the take-home: seeded users, bcrypt password check, a 1
 
 `authorizeDocument(id, user, action)` resolves owner → share → role, then checks the action. **Policy:** a user with no access at all gets `404`, the same as a document that doesn't exist, so ids cannot be probed (IDOR / enumeration). A user who *can* see the document but lacks permission gets `403`, which is honest and gives a better UX. The UI mirrors this (viewer toolbar hidden, editor read-only) but is never relied on. Validation runs before authorization, so malformed input is a `400` regardless of access; this reveals nothing about whether a document exists.
 
+**Comments** use a fourth action in the same permission map: `comment` is allowed for owner, editor *and* viewer (a viewer may comment but not edit). Resolve is allowed for owner/editor or the comment's author; delete for the owner or the author. Comment and version ids are always looked up *within the document in the URL*, so an id from another document is a `404`.
+
+## Version history, comments and presence
+- **History:** before content is overwritten, the previous content is snapshotted if the newest snapshot is older than 5 minutes (so autosave does not create hundreds of versions); the empty starting document is never snapshotted; 30 newest are kept. Restore first snapshots what it replaces, so it is undoable. The author of a snapshot is the last person who saved that content (`lastModifiedBy`).
+- **Presence:** deliberately minimal. Clients send a heartbeat every 10 s while the tab is visible; the API keeps `{document → user → lastSeen}` in memory and returns who was seen within 25 s. Requests are sent in order from the client (a heartbeat and a leave fired together could otherwise race), and a keepalive "leave" is sent on tab close. The trade-off is explicit: it is approximate, resets on restart and is per instance. A real-time co-editing feature would need websockets and a CRDT (e.g. Yjs); a multi-instance presence store would need Redis. Neither is justified for this scope, so neither is added.
+
 ## Rich text and persistence
 Content is saved as Tiptap/ProseMirror JSON, never as trusted HTML, so formatting round-trips structurally and rendering goes through the editor's schema. Server validation requires a `doc` root and bounds request size (2 MB). Trailing empty paragraphs are trimmed on save.
 
@@ -69,8 +77,8 @@ Content is saved as Tiptap/ProseMirror JSON, never as trusted HTML, so formattin
 React + Vite + Tailwind; RTK Query for server state (cache tags invalidate the list after create/import/delete; saves patch the cache instead of refetching so typing is never overwritten); React Hook Form + Zod for the login and share forms; Tiptap for the editor; `docx` is loaded lazily only when exporting. Pages own their headers (home bar vs. editor menus), as in Google Docs.
 
 ## Testing
-- **Server (40 tests, Vitest + Supertest):** the IDOR matrix and role behaviour, persistence round trips, share validation, import of every type including hostile files, login/token handling, CORS and headers. Each test file uses its own throwaway database.
-- **Client (3 unit tests)** for the trailing-paragraph trimming.
+- **Server (74 tests, Vitest + Supertest):** the IDOR matrix and role behaviour, persistence round trips, share validation, import of every type including hostile files, login/token handling, CORS and headers. Each test file uses its own throwaway database.
+- **Client (6 unit tests)** for trailing-paragraph trimming and API-base normalisation.
 - **Browser checks (Playwright, run during development, not part of the repo):** formatting, autosave, refresh persistence, sharing and role UI, imports, downloads, shortcuts, forged/expired tokens, phone layout.
 
 ## Deployment

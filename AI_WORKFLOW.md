@@ -40,12 +40,18 @@ ChatGPT helped me turn the open-ended brief into a plan: it recommended keeping 
 | Document title disappeared in the phone-width header | I looked at the screenshot after a "no horizontal scroll" check passed | wrapping header with a minimum title width |
 | After choosing a style, font or size from a toolbar dropdown, keyboard focus stayed on the `<select>` (Tiptap's `focus()` is deferred a frame), so quickly typed keys went to the dropdown. I introduced this regression; the independent QA session caught it | independent QA retest | move focus to the editor synchronously before applying the change; browser check types immediately after each dropdown change |
 | Blank lines in `.txt` imports were stored as empty paragraphs | independent QA retest | blank lines are separators; trailing empty blocks trimmed on import |
+| Presence: a heartbeat and a "leave" fired together (React mounts effects twice in development) could reach the server out of order and erase the user, so an avatar sometimes took a full extra cycle to appear | repeated runs of the three-browser check were flaky (one failure in two runs), then a request trace showed POST, DELETE, POST sent at the same instant | presence requests are queued so they are sent in order; the check passed 3 of 3 runs afterwards |
+| Presence entries lingered after the tab was closed or reloaded (React cleanup does not run on page unload) | the same browser check failed on "avatar disappears when he leaves" | a keepalive `DELETE` on `pagehide`; the server's 25 s expiry remains the fallback |
+| My history tests moved every snapshot to the same timestamp, so "oldest" was ambiguous (Mongoose also treats `createdAt` as immutable) | one failing test | shift each snapshot back by the same amount using the native driver, preserving order |
 | Tab title never changed from "Document Manager" | independent QA report | per-page `document.title` hook |
 | An early "unused exports" scan reported everything as unused because the shell glob failed | implausible output | scan redone with correct quoting; the invalid result was discarded |
 | Several of my own browser-test failures were test bugs: `Ctrl+A` means "line start" on macOS, instant `isVisible()` checks raced async rendering, ambiguous selectors | investigated each failure before touching app code | `ControlOrMeta+A`, explicit waits, exact selectors. In each case the app behaved correctly. |
 
+## Stretch features: how they were built
+After the core was verified and deployed, I added the three optional items the brief lists that were still missing, as separate commits, each with its own tests, in this order of value: version history, comments, presence. Each one reuses the single authorization function and the existing side panel rather than adding a new access path, and each is described with its limits (presence is in-memory and approximate, comments are not anchored to text, history is rate-limited and capped) instead of being oversold. A cut-off time was set in advance so unfinished stretch work could not endanger the deliverables; all three finished in time.
+
 ## Verification
-- **Automated:** 40 server tests (Vitest + Supertest) and 3 client unit tests; lint and production build.
+- **Automated:** 74 server tests (Vitest + Supertest) and 6 client unit tests; lint and production build.
 - **Real-browser checks** (Playwright): create / format / autosave / reload / share / switch user / viewer read-only / unauthorized / imports / every download format / shortcuts / forged and expired tokens / phone layout.
 - **Independent QA:** a separate session tested the running app and API and reported no critical or major defects; its three minor findings were fixed and its unverified items were answered by code review and new checks.
 - **Source inspection** for authorization, file handling and secrets (`.env` files are git-ignored; only placeholders are committed).

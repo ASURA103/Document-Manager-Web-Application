@@ -10,6 +10,7 @@ Candidate: Rahul Rana
 5. Use the avatar menu → **Switch user**, sign in as **Bob**. The document appears under **Shared with me** with its owner and role. Open it: the editor is read-only ("View only").
 6. As Alice, change Bob's access to an editor (remove, then share again as Editor): Bob can now edit content but cannot rename or share.
 7. Sign in as **Carol** and open Alice's document URL directly: "Document not found, or you do not have access" (the API returns 404).
+8. Stretch features: in an open document, use the history icon (earlier versions, preview, restore), the comment icon (add and resolve comments; Bob as a viewer can comment too), and open the same document as Alice and Bob in two browsers to see each other's avatar.
 
 ## Links
 - **Live URL:** https://document-manager-web-application.vercel.app (client, Vercel)
@@ -46,11 +47,12 @@ All three use the password `Demo@1234`, created by `npm run seed`. They are publ
 - File import into a new document (`.txt .md .html .csv .tsv .docx .xlsx`), with clear errors for unsupported, empty, fake or oversized files. The supported types and the 1 MB limit are shown in the UI and README.
 - Download through a **Download as…** modal (file name + format): `.docx`, PDF (via print), `.md`, `.txt`, `.html`.
 - Autosave on/off switch, explicit Save, and a **Save changes?** modal (Save / Don't save / Cancel) when leaving with unsaved edits.
+- **Version history** (snapshots on change, preview, restore with undo), **comments** (document-level, role-aware) and **presence avatars** (who else has the document open).
 - Sharing by email with viewer/editor roles; owner can revoke; "My documents" and "Shared with me" are visually separate; roles enforced by the API (stranger 404, viewer/editor 403 where applicable).
 - Validation and error handling at the API boundary and in the UI.
 
 ## Testing
-- `cd server && npm test`: 40 tests (Vitest + Supertest), including the IDOR matrix (stranger / viewer / editor / owner), persistence, share validation, hostile-file import, login and token handling.
+- `cd server && npm test`: 74 tests (Vitest + Supertest), including the IDOR matrix (stranger / viewer / editor / owner), persistence, share validation, hostile-file import, login and token handling.
 - `cd client && npm test`: 3 unit tests. `npm run lint` and `npm run build` pass.
 - Browser-level checks (Playwright, run during development) and an independent QA pass covering the full user journey, shortcuts, forged and expired tokens, and a phone-width layout. They are not committed to the repo.
 - Production deployment: verified as described above. Not verified: the optional Docker images (the Docker daemon was not running) and keyboard commits of native dropdown popups (not drivable in headless Chromium).
@@ -60,19 +62,19 @@ All three use the password `Demo@1234`, created by `npm run seed`. They are publ
 |---|---|
 | Export to PDF or Markdown | **Done.** *File → Download as…* asks for a file name and a format: Word `.docx`, Markdown `.md`, plain text, web page, and PDF. PDF uses the browser's print dialog ("Save as PDF") with the chosen name; the other formats are generated in the browser. |
 | Role-based sharing beyond basic access | **Done.** Viewer and editor roles, plus owner-only actions (rename, share, revoke, delete), enforced on the server and covered by tests. |
-| Real-time collaboration indicators | Not built yet. |
-| Commenting or suggestion mode | Not built yet. The *Viewing mode* toggle is read-only viewing, not suggestions. |
-| Document version history | Not built yet. Concurrent edits are last-write-wins. |
+| Real-time collaboration indicators | **Done (presence).** Avatars show who else has the document open, using a 10 s heartbeat with a 25 s expiry (in-memory, approximate, no cursors; documented trade-off). Live co-editing is not built. |
+| Commenting or suggestion mode | **Done (commenting).** Document-level comments with resolve/reopen and delete rules by role; view-only users can comment. Not anchored to text ranges. Suggestion mode is not built. |
+| Document version history | **Done.** Automatic snapshots (at most one per 5 minutes, newest 30 kept), preview, and restore that keeps the replaced content so it can be undone. |
 
 ## Intentionally deprioritised
-Real-time collaboration and presence, comments/suggestions, version history, PDF import, production-grade identity (SSO), rate limiting, object storage, Redis/queues (no workload justifies them; see [ARCHITECTURE.md](ARCHITECTURE.md)).
+Real-time co-editing, suggestion mode, comments anchored to text, PDF import, production-grade identity (SSO), rate limiting, object storage, Redis/queues (no workload justifies them; see [ARCHITECTURE.md](ARCHITECTURE.md)).
 
 ## Known limitations
 See [README.md](README.md#known-limitations). The main ones: last-write-wins concurrent editing, demo-grade authentication (shared demo password, no server-side token revocation), permanent delete, and a moderate `npm audit` advisory in a transitive dependency of `mammoth`.
 
 ## What I would build next (2–4 hours)
-1. Optimistic concurrency (document version) with a "someone else edited this" conflict prompt, then version history.
-2. Real-time presence indicators, then collaborative editing with Yjs.
-3. Comments and suggestion mode.
+1. Optimistic concurrency (document version) with a "someone else edited this" conflict prompt.
+2. Real-time co-editing with Yjs, building on the presence heartbeat.
+3. Comments anchored to text ranges, and suggestion mode.
 4. Rate limiting and account lockout; real identity provider.
 5. A committed browser test suite (Playwright) running in CI.

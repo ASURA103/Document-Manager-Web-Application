@@ -9,7 +9,7 @@ Method: dependency references checked against all source/config files; every exp
 - Purpose: a list of allowed extensions, superseded by the `ALLOWED` map (extension → plausible MIME types), which is the single source of truth
 - Evidence: zero references anywhere in server/src, server/tests, client/src
 - Action: removed
-- Validation: server tests 40/40 pass after removal
+- Validation: server tests pass after removal (40/40 at the time; 74/74 now)
 - Decision Required: no
 
 ## Finding
@@ -19,7 +19,7 @@ Method: dependency references checked against all source/config files; every exp
 - Purpose: id validator used by `idParams` and `shareParams`
 - Evidence: no importers outside the file
 - Action: export removed, constant kept
-- Validation: server tests 40/40 pass
+- Validation: server tests pass (40/40 at the time; 74/74 now)
 - Decision Required: no
 
 ## Finding
@@ -140,6 +140,16 @@ Method: dependency references checked against all source/config files; every exp
 - Evidence: package.json `start` runs `src/server.js`; `index.js` only imports it
 - Action: kept
 - Validation: both `npm start` and `node index.js` boot the API (checked below)
+- Decision Required: no
+
+## Finding
+- Path: server/src/models/{DocumentVersion,Comment}.js, server/src/services/{version,comment,presence}.service.js, client/src/components/{SidePanel,HistoryPanel,CommentsPanel,PresenceAvatars}.jsx, client/src/hooks/usePresence.js
+- Symbol: stretch-feature files (version history, comments, presence)
+- Classification: not dead (production features)
+- Purpose: the optional stretch items from the brief
+- Evidence: the exported-symbol scan repeated after adding them reports nothing unreferenced; routes, API endpoints and UI entry points all reference them; lint clean
+- Action: kept
+- Validation: 74/74 server tests, 6/6 client tests, dedicated browser checks for each feature
 - Decision Required: no
 
 ## Open items
