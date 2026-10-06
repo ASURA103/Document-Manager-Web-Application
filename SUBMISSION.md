@@ -18,7 +18,7 @@ Candidate: Rahul Rana
 - **Walkthrough video:** see [WALKTHROUGH_URL.txt](WALKTHROUGH_URL.txt)
 - **Source:** this folder (`client/`, `server/`)
 
-> Deployment status: **deployed and verified.** On 2026-10-06 a real-browser test ran against the live site: login with the demo accounts, autosave and persistence after refresh, Markdown and CSV import, a named download, sharing to a viewer (viewer is read-only and the API returns 403 for its write), a stranger getting 404, and CORS allowing only the Vercel origin. The test documents were deleted afterwards.
+> Deployment status: **deployed and verified.** On 2026-10-06, after the final deploy, two real-browser runs were made against the live site. (1) Core flow: login with the demo accounts, autosave and persistence after refresh, Markdown and CSV import, a named download, sharing to a viewer (read-only; the API returns 403 for its write), a stranger getting 404, and CORS allowing only the Vercel origin. (2) Stretch features: version history (list, preview, restore), comments (including a view-only user commenting and being unable to restore), and presence avatars between two users. Test documents were deleted afterwards.
 
 ## Demo accounts
 All three use the password `Demo@1234`, created by `npm run seed`. They are published on purpose so reviewers can test sharing.
