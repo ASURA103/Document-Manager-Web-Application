@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { errorMessage, useLoginMutation } from '../features/api.js'
 import useDocumentTitle from '../hooks/useDocumentTitle.js'
+import useSlowHint from '../hooks/useSlowHint.js'
 
 const schema = z.object({
   email: z.email('Enter a valid email.'),
@@ -25,6 +26,7 @@ export default function LoginPage() {
   useDocumentTitle('Sign in – Docs')
   const navigate = useNavigate()
   const [login, { isLoading }] = useLoginMutation()
+  const slow = useSlowHint(isLoading)
   const { register, handleSubmit, setValue, setError, formState: { errors } } = useForm({
     resolver: zodResolver(schema),
     defaultValues: { email: '', password: '' },
@@ -62,6 +64,8 @@ export default function LoginPage() {
           {isLoading ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
+
+      {isLoading && slow && <p role="status" className="mt-3 text-sm text-slate-600">This is taking a moment: the free server may be waking up after being idle. It usually takes under a minute.</p>}
 
       {SHOW_DEMO && (
         <div className="mt-6 border-t border-slate-100 pt-4">

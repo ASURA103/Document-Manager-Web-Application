@@ -1,17 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { FileText, LayoutGrid, List, MoreVertical, Plus, Search, Users, X } from 'lucide-react'
-import { errorMessage, useCreateDocumentMutation, useDeleteDocumentMutation, useGetDocumentsQuery } from '../features/api.js'
+import { useDispatch } from 'react-redux'
+import { api, errorMessage, useCreateDocumentMutation, useDeleteDocumentMutation, useGetDocumentsQuery } from '../features/api.js'
 import ImportButton, { IMPORT_TYPES, MAX_MB } from '../components/ImportButton.jsx'
 import UserMenu from '../components/UserMenu.jsx'
 import ShareDialog from '../components/ShareDialog.jsx'
 import useDocumentTitle from '../hooks/useDocumentTitle.js'
+import useSlowHint from '../hooks/useSlowHint.js'
 import Dropdown, { MenuItem } from '../components/Dropdown.jsx'
 
 const fmt = (d) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 
 function DocCard({ doc, view, onDelete, onShare }) {
+  const dispatch = useDispatch()
   const shared = doc.role !== 'owner'
+  // Start loading the document as soon as the pointer or keyboard focus reaches the row: it is usually ready by the click.
+  const prefetch = () => dispatch(api.util.prefetch('getDocument', doc.id, { ifOlderThan: 60 }))
   const menu = (
     <Dropdown align="right" label={`Options for ${doc.title}`} buttonClass="rounded-full p-1.5 hover:bg-slate-200" trigger={<MoreVertical size={16} />}>
       <MenuItem onClick={() => window.open(`/documents/${doc.id}`, '_blank', 'noopener')}>Open in new tab</MenuItem>
@@ -25,7 +30,7 @@ function DocCard({ doc, view, onDelete, onShare }) {
     return (
       <li className="flex items-center gap-3 px-4 py-2 hover:bg-slate-50">
         <FileText size={20} className="shrink-0 text-blue-600" />
-        <Link to={`/documents/${doc.id}`} className="min-w-0 flex-1 truncate text-sm font-medium">{doc.title}</Link>
+        <Link to={`/documents/${doc.id}`} onMouseEnter={prefetch} onFocus={prefetch} className="min-w-0 flex-1 truncate text-sm font-medium">{doc.title}</Link>
         {badge}
         <span className="hidden w-40 truncate text-xs text-slate-600 sm:block">{shared ? doc.owner?.name : 'me'}</span>
         <span className="w-28 text-xs text-slate-600">{fmt(doc.updatedAt)}</span>
@@ -35,11 +40,11 @@ function DocCard({ doc, view, onDelete, onShare }) {
   }
   return (
     <li className="overflow-hidden rounded-lg border border-slate-200 bg-white hover:border-blue-400">
-      <Link to={`/documents/${doc.id}`} aria-label={`Open ${doc.title}`} className={`flex h-36 items-center justify-center ${shared ? 'bg-emerald-50' : 'bg-slate-50'}`}>
+      <Link to={`/documents/${doc.id}`} onMouseEnter={prefetch} onFocus={prefetch} aria-label={`Open ${doc.title}`} className={`flex h-36 items-center justify-center ${shared ? 'bg-emerald-50' : 'bg-slate-50'}`}>
         {shared ? <Users size={40} strokeWidth={1.25} className="text-emerald-600" /> : <FileText size={40} strokeWidth={1.25} className="text-blue-500" />}
       </Link>
       <div className="border-t border-slate-100 px-3 py-2">
-        <Link to={`/documents/${doc.id}`} className="block truncate text-sm font-medium">{doc.title}</Link>
+        <Link to={`/documents/${doc.id}`} onMouseEnter={prefetch} onFocus={prefetch} className="block truncate text-sm font-medium">{doc.title}</Link>
         <div className="mt-1 flex items-center justify-between text-xs text-slate-600">
           <span className="flex min-w-0 items-center gap-1.5">
             <FileText size={14} className="shrink-0 text-blue-600" />
@@ -92,10 +97,13 @@ export default function DashboardPage() {
   const [q, setQ] = useState(() => params.get('q') || '')
   const updateQuery = (value) => { setQ(value); setParams(value ? { q: value } : {}, { replace: true }) }
   const searchRef = useRef(null)
+  // Fetch the editor's code in the background so opening a document does not wait for it.
+  useEffect(() => { const t = setTimeout(() => import('./EditorPage.jsx'), 800); return () => clearTimeout(t) }, [])
   const [shareDoc, setShareDoc] = useState(null) // document whose Share dialog is open
   const [view, setView] = useState(() => { try { return localStorage.getItem('docs.view') || 'list' } catch { return 'list' } })
   const [filter, setFilter] = useState('all') // all | owned | shared
   const { data, isLoading, error, refetch } = useGetDocumentsQuery()
+  const slow = useSlowHint(isLoading)
   const [createDoc, { isLoading: creating, error: createError }] = useCreateDocumentMutation()
   const [deleteDoc, { error: deleteError }] = useDeleteDocumentMutation()
 
@@ -198,7 +206,7 @@ export default function DashboardPage() {
 
         {createError && <p role="alert" className="mt-2 text-sm text-red-600">{errorMessage(createError, 'Unable to create document.')}</p>}
         {deleteError && <p role="alert" className="mt-2 text-sm text-red-600">{errorMessage(deleteError, 'Unable to delete document.')}</p>}
-        {isLoading && <p className="mt-6 text-sm text-slate-600">Loading documents…</p>}
+        {isLoading && <p className="mt-6 text-sm text-slate-600">Loading documents…{slow && ' The free server may be waking up after being idle; this usually takes under a minute.'}</p>}
         {error && <p role="alert" className="mt-6 text-sm text-red-600">{errorMessage(error, 'Unable to load documents.')} <button onClick={refetch} className="underline">Retry</button></p>}
 
         {data && (

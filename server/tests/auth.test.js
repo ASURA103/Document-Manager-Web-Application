@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { setup, teardown, as, PASSWORD } from './helpers.js';
+import jwt from 'jsonwebtoken';
+import { setup, teardown, as, PASSWORD, JWT_SECRET } from './helpers.js';
 
 let api, users;
 beforeAll(async () => ({ api, users } = await setup()));
@@ -42,6 +43,44 @@ describe('authentication', () => {
   it('rejects forged and malformed tokens', async () => {
     expect((await api.get('/api/auth/me').set({ Authorization: 'Bearer abc.def.ghi' })).status).toBe(401);
     expect((await api.get('/api/auth/me').set(as(users.alice))).body.data.email).toBe(users.alice.email);
+  });
+});
+
+describe('identity from the signed token and login payload', () => {
+  it('login also returns the dashboard data, and only for a correct password', async () => {
+    const ok = await api.post('/api/auth/login').send({ email: users.alice.email, password: PASSWORD });
+    expect(ok.body.data.documents).toEqual({ owned: expect.any(Array), shared: expect.any(Array) });
+    const bad = await api.post('/api/auth/login').send({ email: users.alice.email, password: 'wrong-password' });
+    expect(bad.status).toBe(401);
+    expect(JSON.stringify(bad.body)).not.toMatch(/documents|owned|shared/);
+  });
+
+  it('a signed token identifies the user without a database lookup (works even after the user row is gone)', async () => {
+    const { User } = await import('../src/models/User.js');
+    const temp = await User.create({ name: 'Temp', email: 'temp@example.com', passwordHash: await User.hashPassword('x') });
+    const token = (await api.post('/api/auth/login').send({ email: 'temp@example.com', password: 'x' })).body.data.token;
+    await User.deleteOne({ _id: temp._id });
+    const me = await api.get('/api/auth/me').set({ Authorization: `Bearer ${token}` });
+    expect(me.status).toBe(200); // documented trade-off: valid until the 12 h token expires
+    expect(me.body.data.email).toBe('temp@example.com');
+  });
+
+  it('an older token that carries only the user id still works if the user exists, and is rejected if not', async () => {
+    const { User } = await import('../src/models/User.js');
+    const alice = await User.findOne({ email: users.alice.email });
+    const legacy = jwt.sign({ sub: alice.id }, JWT_SECRET, { expiresIn: '1h' });
+    expect((await api.get('/api/auth/me').set({ Authorization: `Bearer ${legacy}` })).status).toBe(200);
+    const gone = jwt.sign({ sub: '64b64b64b64b64b64b64b64b' }, JWT_SECRET, { expiresIn: '1h' });
+    expect((await api.get('/api/auth/me').set({ Authorization: `Bearer ${gone}` })).status).toBe(401);
+  });
+
+  it('rejects a token with a malformed subject', async () => {
+    const bad = jwt.sign({ sub: 'not-an-id', name: 'x', email: 'x@example.com' }, JWT_SECRET, { expiresIn: '1h' });
+    const res = await api.get('/api/auth/me').set({ Authorization: `Bearer ${bad}` });
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
+    const noSub = jwt.sign({ name: 'x', email: 'x@example.com' }, JWT_SECRET, { expiresIn: '1h' });
+    expect((await api.get('/api/auth/me').set({ Authorization: `Bearer ${noSub}` })).status).toBe(401);
   });
 });
 

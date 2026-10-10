@@ -19,16 +19,16 @@ const CAN = {
 export async function authorizeDocument(documentId, user, action) {
   if (!mongoose.isValidObjectId(documentId)) throw notFound('DOCUMENT_NOT_FOUND', 'Document not found.');
 
-  const doc = await Document.findById(documentId);
+  // Both lookups start together (one database round trip instead of up to two in a row).
+  const [doc, share] = await Promise.all([
+    Document.findById(documentId),
+    DocumentShare.findOne({ document: documentId, user: user._id }),
+  ]);
   if (!doc) throw notFound('DOCUMENT_NOT_FOUND', 'Document not found.');
 
   let role = null;
-  if (doc.owner.equals(user._id)) {
-    role = 'owner';
-  } else {
-    const share = await DocumentShare.findOne({ document: doc._id, user: user._id });
-    if (share) role = share.permission;
-  }
+  if (doc.owner.equals(user._id)) role = 'owner';
+  else if (share) role = share.permission;
 
   if (!role) throw notFound('DOCUMENT_NOT_FOUND', 'Document not found.');
   if (!CAN[action].includes(role)) {

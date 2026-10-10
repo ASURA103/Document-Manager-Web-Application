@@ -1,16 +1,21 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { setup, teardown, as } from './helpers.js';
 import { DocumentVersion } from '../src/models/DocumentVersion.js';
+import { Document } from '../src/models/Document.js';
 import { MAX_VERSIONS } from '../src/services/version.service.js';
 
 let api, users, docId, otherDocId;
 const body = (text) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] });
 const save = (id, text, who = users.alice) => api.patch(`/api/documents/${id}`).set(as(who)).send({ content: body(text) });
 // Mongoose treats createdAt as immutable, so move snapshots into the past with the native driver.
-const ageSnapshots = (id, minutes = 10) => DocumentVersion.collection.updateMany(
-  { document: new (DocumentVersion.base.Types.ObjectId)(id) },
-  [{ $set: { createdAt: { $subtract: ['$createdAt', minutes * 60 * 1000] } } }], // shift back, preserving their order
-);
+const ageSnapshots = async (id, minutes = 10) => {
+  const ms = minutes * 60 * 1000;
+  const oid = new (DocumentVersion.base.Types.ObjectId)(id);
+  // shift every snapshot back, preserving their order (createdAt is immutable in Mongoose, so use the native driver) ...
+  await DocumentVersion.collection.updateMany({ document: oid }, [{ $set: { createdAt: { $subtract: ['$createdAt', ms] } } }]);
+  // ... and the document's own "last snapshot" marker, which autosave consults instead of querying the history
+  await Document.collection.updateOne({ _id: oid }, [{ $set: { lastSnapshotAt: { $subtract: ['$lastSnapshotAt', ms] } } }]);
+};
 const versions = async (id, who = users.alice) => (await api.get(`/api/documents/${id}/versions`).set(as(who))).body.data;
 
 beforeAll(async () => {

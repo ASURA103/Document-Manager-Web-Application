@@ -145,6 +145,8 @@ function DocumentEditor({ doc }) {
   const counts = useEditorState({
     editor,
     selector: ({ editor: e }) => {
+      // The editor can be mid-setup or just destroyed (React dev double-mount, instant render from cache): skip it.
+      if (!e || e.isDestroyed || !e.schema) return { words: 0, chars: 0 }
       const text = e.getText({ blockSeparator: ' ' }).trim()
       return { words: text ? text.split(/\s+/).length : 0, chars: text.length }
     },

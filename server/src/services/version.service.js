@@ -29,10 +29,15 @@ async function prune(documentId) {
 export async function snapshotBeforeOverwrite(doc, { force = false, now = new Date() } = {}) {
   if (!doc.content || sameContent(doc.content, emptyDoc())) return;
   if (!force) {
-    const latest = await DocumentVersion.findOne({ document: doc._id }).sort({ createdAt: -1 }).select('createdAt');
-    if (latest && now - latest.createdAt < SNAPSHOT_INTERVAL_MS) return;
+    if (doc.lastSnapshotAt) {
+      if (now - doc.lastSnapshotAt < SNAPSHOT_INTERVAL_MS) return; // known from the document itself: no extra query
+    } else {
+      const latest = await DocumentVersion.findOne({ document: doc._id }).sort({ createdAt: -1 }).select('createdAt');
+      if (latest && now - latest.createdAt < SNAPSHOT_INTERVAL_MS) return;
+    }
   }
   await DocumentVersion.create({ document: doc._id, title: doc.title, content: doc.content, author: doc.lastModifiedBy || doc.owner });
+  doc.lastSnapshotAt = now; // persisted by the caller's doc.save()
   await prune(doc._id);
 }
 

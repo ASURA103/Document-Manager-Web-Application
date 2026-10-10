@@ -60,6 +60,7 @@ npm run dev                   # http://localhost:5173
 | server | `JWT_SECRET` | Token signing secret (required) |
 | server | `CLIENT_URL` | Allowed browser origin(s) for CORS, comma-separated (default `http://localhost:5173`) |
 | server | `PORT` | API port (default `4000`) |
+| server | `BCRYPT_COST` | bcrypt rounds for new password hashes (default `8`; existing hashes keep verifying at any cost) |
 | server | `SEED_DEMO_USERS` | `true` creates/refreshes the 3 demo users at startup, for hosts with no shell (e.g. Render free tier). Resets their password to the documented one |
 | client | `VITE_B_URL` | API base URL, e.g. `https://<api>.onrender.com/api` (default `/api`) |
 | client | `VITE_SHOW_DEMO_ACCOUNTS` | `false` hides the demo-account shortcuts on the login page (default: shown) |
@@ -77,7 +78,7 @@ Created by `npm run seed`. All use the password **`Demo@1234`** (published on pu
 
 ## Testing
 ```bash
-cd server && npm test   # 74 tests (Vitest + Supertest) against a local MongoDB
+cd server && npm test   # 85 tests (Vitest + Supertest) against a local MongoDB
 cd client && npm test   # 6 unit tests
 cd client && npm run lint && npm run build
 ```
@@ -111,6 +112,21 @@ All routes are under `/api`; responses are `{ "success": true, "data": … }` or
 | GET / POST | `/documents/:id/comments` | any role; POST `{ body }` (1-2000 chars) |
 | PATCH / DELETE | `/documents/:id/comments/:commentId` | PATCH `{ resolved }`: owner/editor or author; DELETE: owner or author |
 | POST / DELETE | `/documents/:id/presence` | heartbeat (returns who is here) / leave; any role |
+
+## Performance
+Measured first, then changed. Locally the API is fast (login about 70 ms, dashboard list about 2 ms), so the cost in production is the network distance to the hosted API (about 0.4 s per request, measured) and each database round trip from the API to Atlas (about 0.2 s). The work therefore reduces round trips and CPU rather than local milliseconds, and a test (`server/tests/roundtrips.test.js`) enforces a budget of database commands per request:
+
+| Request | Database commands before | after |
+|---|---|---|
+| Login (now also returns the dashboard data) | 1 (+ 6 for the separate list request) | 3 in one request |
+| `GET /auth/me` | 1 | 0 |
+| `GET /documents` (dashboard list) | 6 | 2 |
+| Open own document | 3 | 2 |
+| Open a shared document | 4 | 3 |
+| Autosave | 7 | 3 |
+
+Other changes: the signed token carries the user's identity so requests skip a user lookup (trade-off: a deleted user keeps access until the 12 h token expires; the app cannot delete users); password hashing cost is 8 by default (`BCRYPT_COST`, about 4x faster than 10 on a small host); the client caches data for 5 minutes, seeds new and just-opened documents into the cache, prefetches a document when its row is hovered, loads the editor code separately (main bundle 971 KB → 479 KB), and wakes the sleeping free API host as soon as the page loads, with an explanatory message after 3 s.
+**Not fixable in code:** the distance (an uncached request is still about 0.4 s plus its database trips) and the free-tier cold start (up to a minute after idle). Putting the API and the database in the same region near the users and a keep-awake monitor on `/api/health` would fix both.
 
 ## Known limitations
 - No real-time *co-editing*; concurrent edits are last-write-wins (no version check), though history lets you recover an earlier version.

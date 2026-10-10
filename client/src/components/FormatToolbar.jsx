@@ -39,10 +39,17 @@ function Swatches({ colors, onPick, onReset, resetLabel }) {
   )
 }
 
+const EMPTY_STATE = {
+  canUndo: false, canRedo: false, style: 'p', font: '', size: 16, bold: false, italic: false, underline: false, strike: false,
+  link: false, highlight: false, color: '#000000', left: false, center: false, right: false, justify: false,
+  task: false, bullet: false, ordered: false, quote: false, code: false,
+}
+
 export default function FormatToolbar({ editor, onLink }) {
   const s = useEditorState({
     editor,
     selector: ({ editor: e }) => {
+      if (!e || e.isDestroyed || !e.schema) return EMPTY_STATE // editor mid-setup or just destroyed
       const ts = e.getAttributes('textStyle')
       return {
         canUndo: e.can().undo(), canRedo: e.can().redo(),

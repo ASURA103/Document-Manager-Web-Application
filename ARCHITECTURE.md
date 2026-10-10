@@ -76,8 +76,22 @@ Content is saved as Tiptap/ProseMirror JSON, never as trusted HTML, so formattin
 ## Frontend
 React + Vite + Tailwind; RTK Query for server state (cache tags invalidate the list after create/import/delete; saves patch the cache instead of refetching so typing is never overwritten); React Hook Form + Zod for the login and share forms; Tiptap for the editor; `docx` is loaded lazily only when exporting. Pages own their headers (home bar vs. editor menus), as in Google Docs.
 
+## Performance
+Findings drove the changes: the API itself is cheap (login about 70 ms locally), while each database trip from the hosted API costs about 0.2 s and the network floor to the hosted API is about 0.4 s. So the design minimises sequential round trips, and a test enforces a per-endpoint budget of MongoDB commands:
+
+| Request | Database commands before | after |
+|---|---|---|
+| Login (now also returns the dashboard data) | 1 (+ 6 for the separate list request) | 3 in one request |
+| `GET /auth/me` | 1 | 0 |
+| `GET /documents` (dashboard list) | 6 | 2 |
+| Open own document | 3 | 2 |
+| Open a shared document | 4 | 3 |
+| Autosave | 7 | 3 |
+
+Mechanisms: identity from the signed token (no per-request user lookup), document and share looked up in parallel, one aggregate for the shared list, login returning the dashboard data, a `lastSnapshotAt` marker so autosave skips the history query, and client-side caching, prefetching and code splitting. Trade-offs: a deleted user keeps access until the 12 h token expires (the app cannot delete users; revocation was already a documented limitation); bcrypt cost 8 by default because the demo password is public and bcryptjs is slow on small hosts (configurable). Remaining limits are distance and the free-tier cold start; a same-region deployment and a keep-awake monitor are the fix.
+
 ## Testing
-- **Server (74 tests, Vitest + Supertest):** the IDOR matrix and role behaviour, persistence round trips, share validation, import of every type including hostile files, login/token handling, CORS and headers. Each test file uses its own throwaway database.
+- **Server (85 tests, Vitest + Supertest):** the IDOR matrix and role behaviour, persistence round trips, share validation, import of every type including hostile files, login/token handling, CORS and headers. Each test file uses its own throwaway database.
 - **Client (6 unit tests)** for trailing-paragraph trimming and API-base normalisation.
 - **Browser checks (Playwright, run during development, not part of the repo):** formatting, autosave, refresh persistence, sharing and role UI, imports, downloads, shortcuts, forged/expired tokens, phone layout.
 

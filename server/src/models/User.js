@@ -11,7 +11,9 @@ const userSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-const COST = 10;
+// bcryptjs is pure JavaScript and slow on a small host CPU, so the default is 8 (about 4x faster than 10).
+// Set BCRYPT_COST higher where the demo-account password is not public. Existing hashes keep verifying.
+const COST = Number(process.env.BCRYPT_COST) || 8;
 userSchema.statics.hashPassword = (plain) => bcrypt.hash(plain, COST);
 userSchema.methods.verifyPassword = function (plain) {
   return bcrypt.compare(plain, this.passwordHash);

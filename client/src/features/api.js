@@ -25,6 +25,7 @@ export const errorMessage = (err, fallback = 'Something went wrong.') =>
 export const api = createApi({
   reducerPath: 'api',
   baseQuery: baseQueryWithAuth,
+  keepUnusedDataFor: 300, // seconds: revisiting a page shows cached data instantly while it revalidates
   tagTypes: ['Docs', 'Doc', 'Shares', 'Versions', 'Comments'],
   endpoints: (b) => ({
     login: b.mutation({
@@ -34,6 +35,9 @@ export const api = createApi({
         try {
           const { data } = await queryFulfilled
           dispatch(setCredentials(data))
+          // The login response already carries the dashboard data: put it in the cache so the dashboard
+          // renders immediately instead of waiting for a second request.
+          if (data.documents) dispatch(api.util.upsertQueryData('getDocuments', undefined, data.documents))
         } catch { /* failed login is surfaced by the caller via the mutation result */ }
       },
     }),
@@ -48,6 +52,9 @@ export const api = createApi({
       query: () => ({ url: '/documents', method: 'POST', body: {} }),
       transformResponse: (r) => r.data,
       invalidatesTags: ['Docs'],
+      async onQueryStarted(_a, { dispatch, queryFulfilled }) {
+        try { const { data } = await queryFulfilled; dispatch(api.util.upsertQueryData('getDocument', data.id, data)) } catch { /* caller shows the error */ }
+      },
     }),
     importDocument: b.mutation({
       query: (file) => {
@@ -57,6 +64,9 @@ export const api = createApi({
       },
       transformResponse: (r) => r.data,
       invalidatesTags: ['Docs'],
+      async onQueryStarted(_a, { dispatch, queryFulfilled }) {
+        try { const { data } = await queryFulfilled; dispatch(api.util.upsertQueryData('getDocument', data.id, data)) } catch { /* caller shows the error */ }
+      },
     }),
     updateDocument: b.mutation({
       query: ({ id, ...body }) => ({ url: `/documents/${id}`, method: 'PATCH', body }),

@@ -52,7 +52,7 @@ All three use the password `Demo@1234`, created by `npm run seed`. They are publ
 - Validation and error handling at the API boundary and in the UI.
 
 ## Testing
-- `cd server && npm test`: 74 tests (Vitest + Supertest), including the IDOR matrix (stranger / viewer / editor / owner), persistence, share validation, hostile-file import, login and token handling.
+- `cd server && npm test`: 85 tests (Vitest + Supertest), including the IDOR matrix (stranger / viewer / editor / owner), persistence, share validation, hostile-file import, login and token handling.
 - `cd client && npm test`: 3 unit tests. `npm run lint` and `npm run build` pass.
 - Browser-level checks (Playwright, run during development) and an independent QA pass covering the full user journey, shortcuts, forged and expired tokens, and a phone-width layout. They are not committed to the repo.
 - Production deployment: verified as described above. Not verified: the optional Docker images (the Docker daemon was not running) and keyboard commits of native dropdown popups (not drivable in headless Chromium).
@@ -70,7 +70,7 @@ All three use the password `Demo@1234`, created by `npm run seed`. They are publ
 Real-time co-editing, suggestion mode, comments anchored to text, PDF import, production-grade identity (SSO), rate limiting, object storage, Redis/queues (no workload justifies them; see [ARCHITECTURE.md](ARCHITECTURE.md)).
 
 ## Known limitations
-See [README.md](README.md#known-limitations). The main ones: last-write-wins concurrent editing, demo-grade authentication (shared demo password, no server-side token revocation), permanent delete, and a moderate `npm audit` advisory in a transitive dependency of `mammoth`.
+See [README.md](README.md#known-limitations). The main ones: last-write-wins concurrent editing, demo-grade authentication (shared demo password, no server-side token revocation), permanent delete, and a moderate `npm audit` advisory in a transitive dependency of `mammoth`. Speed: database round trips per request were cut (dashboard list 6 → 2, autosave 7 → 3, login now returns the dashboard), but the hosted API is far from some users and sleeps when idle, so a request can still take about 0.5 s and the first one after a pause up to a minute (see README, Performance).
 
 ## What I would build next (2–4 hours)
 1. Optimistic concurrency (document version) with a "someone else edited this" conflict prompt.

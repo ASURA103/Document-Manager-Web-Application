@@ -9,6 +9,8 @@ const documentSchema = new mongoose.Schema(
     content: { type: mongoose.Schema.Types.Mixed, required: true },
     owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     // Last person to change the content; recorded as the author of the next history snapshot.
+    // When the newest history snapshot was taken; lets autosave skip a database lookup (see version.service.js).
+    lastSnapshotAt: { type: Date, default: null },
     lastModifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true, minimize: false },

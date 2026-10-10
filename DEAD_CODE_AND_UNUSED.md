@@ -9,7 +9,7 @@ Method: dependency references checked against all source/config files; every exp
 - Purpose: a list of allowed extensions, superseded by the `ALLOWED` map (extension → plausible MIME types), which is the single source of truth
 - Evidence: zero references anywhere in server/src, server/tests, client/src
 - Action: removed
-- Validation: server tests pass after removal (40/40 at the time; 74/74 now)
+- Validation: server tests pass after removal (40/40 at the time; 85/85 now)
 - Decision Required: no
 
 ## Finding
@@ -19,7 +19,7 @@ Method: dependency references checked against all source/config files; every exp
 - Purpose: id validator used by `idParams` and `shareParams`
 - Evidence: no importers outside the file
 - Action: export removed, constant kept
-- Validation: server tests pass (40/40 at the time; 74/74 now)
+- Validation: server tests pass (40/40 at the time; 85/85 now)
 - Decision Required: no
 
 ## Finding
@@ -149,7 +149,7 @@ Method: dependency references checked against all source/config files; every exp
 - Purpose: the optional stretch items from the brief
 - Evidence: the exported-symbol scan repeated after adding them reports nothing unreferenced; routes, API endpoints and UI entry points all reference them; lint clean
 - Action: kept
-- Validation: 74/74 server tests, 6/6 client tests, dedicated browser checks for each feature
+- Validation: 74/85 server tests, 6/6 client tests, dedicated browser checks for each feature
 - Decision Required: no
 
 ## Open items
